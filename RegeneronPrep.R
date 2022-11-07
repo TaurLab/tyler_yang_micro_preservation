@@ -325,8 +325,7 @@ simsamps = secondsamps %>%
                               "TY.4_D0_75C", "TY.5_D6_75C", "TY.6_D9_75C",
                               "TY.10_D0_UV", "TY.11_D6_UV", "TY.12_D9_UV",
                               "TY.13_D0_75C_UV", "TY.14_D6_75C_UV", "TY.15_D9_75C_UV")) %>%
-  mutate(heat = fct_relevel(heat, "no heat", "75C")) %>%
-  mutate(InvSimpson = ifelse(InvSimpson < 10, InvSimpson + 5, ifelse(InvSimpson > 20, InvSimpson - 5, InvSimpson)))
+  mutate(heat = fct_relevel(heat, "no heat", "75C")) 
 
 seconddiversity = ggplot(simsamps, aes(x = time, y = InvSimpson, fill = "black")) + geom_col() + 
   facet_grid(heat~uv) +
