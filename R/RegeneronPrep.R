@@ -1,4 +1,3 @@
-install.packages("phytools")
 library(phytools)
 library(yingtools2)
 library(tidyverse)
@@ -13,10 +12,9 @@ library(vegan)
 # SET UP ------------------------------------------------------------------
 
 # import data
-
 rm(list = ls())
-setwd("/Users/Tyler/Documents/Research/Regeneron")
-load("phy.tyler.RData")
+# setwd("/Users/Tyler/Documents/Research/Regeneron")
+load("data/phy.tyler.RData")
 
 # get samps
 
@@ -110,7 +108,7 @@ stackedplot = ggplot() +
 
 stackedplot
 
-pdf("/Users/Tyler/Documents/Research/Regeneron/Graphs/1_ovfirst.pdf", width = 6, height = 10)
+pdf("plots/1_ovfirst.pdf", width = 6, height = 10)
 stackedplot
 dev.off()
 
@@ -119,27 +117,34 @@ rm(list = c("fsampsdups", "fotudups"))
 # PART ONE PCA ----------------------------------------------------------------------------
 
 # load original and "others" data 
-setwd("/Users/Tyler/Desktop/R")
-load("tyler.phylo.RData")
-phy.others = read_rds("/Users/Tyler/Desktop/R/other.samps.rds")
-others = get.samp(phy.others)
+# setwd("/Users/Tyler/Desktop/R")
 
+# load("data/tyler.phylo.RData")
+phy.others = read_rds("data/other.samps.rds")
+others = get.samp(phy.others)
 # unname the taxa
-taxa_names(tyler.phy) <- as.character(refseq(tyler.phy)) %>% unname()
+
+phy.tyler.pca <- phy.tyler %>% subset_samples(experiment==1) %>% prune_unused_taxa()
+
+taxa_names(phy.tyler.pca) <- as.character(refseq(phy.tyler.pca)) %>% unname()
 taxa_names(phy.others) <- as.character(refseq(phy.others)) %>% unname()
 
+
+
+
 # merge phyloseq objects
-phy.together = merge_phyloseq(otu_table(tyler.phy), otu_table(phy.others),
-                              tax_table(tyler.phy),tax_table(phy.others))
+phy.together = merge_phyloseq(otu_table(phy.tyler.pca), otu_table(phy.others),
+                              tax_table(phy.tyler.pca),tax_table(phy.others))
 
 # set distance matrix 
 dst = distance(phy.together, method = "bray")
 
 # final modifications to sample dataframe
-combinedsamps = get.samp(phy.together) %>% left_join(get.samp(tyler.phy), by = "sample") %>%
-  mutate(origin = ifelse(is.na(full_name), "Other", "Our Study")) %>%
+combinedsamps = get.samp(phy.together) %>% left_join(get.samp(phy.tyler.pca), by = "sample") %>%
+  mutate(origin = ifelse(is.na(experiment), "Other", "Our Study")) %>%
   dplyr::rename(Origin = origin) %>%
   mutate(Origin = fct_relevel(Origin, "Our Study", "Other"))
+
 sample_data(phy.together) <- combinedsamps %>% set.samp()
 pcadata = ordinate(phy.together, method = "NMDS", distance = "bray") %>%
   vegan::scores(display = "sites") %>%
@@ -158,13 +163,11 @@ pcoa = ggplot(pcadata, aes(x = NMDS1, y = NMDS2, color = Origin)) + geom_point()
        Bacterial composition similarity is represented by proximity, and is plotted using multidimensional scaling, 
        with Bray-Curtis as distance metric. Sample color denotes origin as shown in the legend. ")
 
-pcoa
-
-pdf("/Users/Tyler/Documents/Research/Regeneron/Graphs/2_comparativePCA.pdf", width = 8, height = 8)
+pdf("plots/2_comparativePCA.pdf", width = 8, height = 8)
 pcoa
 dev.off()
 
-rm(list = c("combinedsamps", "others", "pcadata", "phy.others", "phy.together", "tyler.phy"))
+rm(list = c("combinedsamps", "others", "pcadata", "phy.others", "phy.together", "phy.tyler.pca"))
 
 # PART ONE LEFSE TEMP ------------------------------------------------------------------------------------
 
@@ -601,17 +604,19 @@ diversityplot
 
 
 
+vegan
+
+
+
+
+designdist
 
 
 
 
 
 
-
-
-
-
-
+?vegdist
 
 
 
