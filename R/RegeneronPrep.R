@@ -64,6 +64,9 @@ pal = get.yt.palette2(otusub)
 # PART ONE FACETED STACKED BAR GRAPH ------------------------------------------------------------------
 
 # duplicate control bars
+
+firstsamps
+
 firstsamps$tempmodified[9] = "none"
 firstsamps$tempmodified[10] = "none"
 fsampsdups = firstsamps %>%  
@@ -105,6 +108,8 @@ stackedplot = ggplot() +
                   Pairs of samples are organized by storage time (top facet) and storage temperature (right facet). 
                   Bacterial taxa are denoted by colors, with bacteria of similar taxonomic 
                   classifications having similar colors.") 
+
+
 
 stackedplot
 
@@ -163,10 +168,10 @@ pcoa = ggplot(pcadata, aes(x = NMDS1, y = NMDS2, color = Origin)) + geom_point()
        Bacterial composition similarity is represented by proximity, and is plotted using multidimensional scaling, 
        with Bray-Curtis as distance metric. Sample color denotes origin as shown in the legend. ")
 
-pdf("plots/2_comparativePCA.pdf", width = 8, height = 8)
+pdf("plots/2_comparativePCA.pdf", width = 6, height = 6)
 pcoa
 dev.off()
-
+#shell.exec("plots/2_comparativePCA.pdf")
 rm(list = c("combinedsamps", "others", "pcadata", "phy.others", "phy.together", "phy.tyler.pca"))
 
 # PART ONE LEFSE TEMP ------------------------------------------------------------------------------------
@@ -204,7 +209,7 @@ ldatemp = ggplot(lda.plot, aes(x = taxon, y = lda, fill = direction)) +
        as displayed in the legend.")
 ldatemp
 
-pdf("/Users/Tyler/Documents/Research/Regeneron/Graphs/3A_ldatemp.pdf", width = 8, height = 12)
+pdf("plots/3A_ldatemp.pdf", width = 8, height = 12)
 ldatemp
 dev.off()
 
@@ -243,11 +248,23 @@ ldatime = ggplot(lda.plot2, aes(x = taxon, y = lda2, fill = direction)) +
        The color and direction of the bars indicate which group had more of the associated taxa, 
        as displayed in the legend.")
 
-ldatime
 
-pdf("/Users/Tyler/Documents/Research/Regeneron/Graphs/3B_ldatime.pdf", width = 8, height = 12)
+pdf("plots/3B_ldatime.pdf", width = 8, height = 12)
 ldatime
 dev.off()
+
+pdf("plots/3_lda_temp_time.pdf",width=8,height=20)
+gg.stack(
+  ldatemp,
+  ldatime,
+  heights=c(4,1),
+  gap=12,
+  newpage = FALSE
+)
+dev.off()
+
+shell.exec("plots/3_lda_temp_time.pdf")
+
 
 rm(list = c("lda","lda2", "lda.plot", "lda.plot2", "lefsesamps"))
 
@@ -267,7 +284,8 @@ diversity = ggplot(invsamps, aes(x = replicate, y = InvSimpson, fill = "black"))
         panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         axis.line = element_line(color = "black"),
         axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.title.x = element_blank(), strip.text.x = element_text(size = 9),
-        axis.ticks.y = element_blank(), axis.text.y = element_blank(), axis.title.y = element_text(vjust = 0.5, size = 14), strip.text.y = element_text(size = 9),
+        # axis.ticks.y = element_blank(), axis.text.y = element_blank(), axis.title.y = element_text(vjust = 0.5, size = 14), 
+        strip.text.y = element_text(size = 9),
         plot.tag = element_text(angle = -90, size = 14), plot.tag.position = c(1.025, 0.5),
         plot.title = element_text(hjust = 0.5, size = 15), plot.subtitle = element_text(hjust = 0.5, size = 14),
         legend.position = "none",
@@ -280,9 +298,19 @@ diversity = ggplot(invsamps, aes(x = replicate, y = InvSimpson, fill = "black"))
 
 diversity
 
-pdf("/Users/Tyler/Documents/Research/Regeneron/Graphs/4_diversityfirst.pdf", width = 7, height = 10)
+pdf("plots/4_diversityfirst.pdf", width = 7, height = 10)
 diversity
 dev.off()
+
+
+
+# TESTING DIVERSITY DIFFERENCES -------------------------------------------
+
+model <- invsamps %>%
+  mutate(time.cont=as.numeric(str_extract(time,"[0-9]+"))) %>%
+  lm(InvSimpson ~ time.cont,data=.)
+summary(model) #.4
+kruskal.test(InvSimpson ~ temp,data=invsamps) # 0.85
 
 # PART TWO OVERVIEW --------------------------------------------------
 
@@ -323,17 +351,21 @@ dev.off()
 
 # PART TWO SIMILARS DIVERSITY BAR GRAPH -----------------------------------
 
-simsamps = secondsamps %>%
-  dplyr::filter(sample %in% c("TY.1_D0_NT", "TY.2_D6_Dry", "TY.3_D9_Dry",
-                              "TY.4_D0_75C", "TY.5_D6_75C", "TY.6_D9_75C",
-                              "TY.10_D0_UV", "TY.11_D6_UV", "TY.12_D9_UV",
-                              "TY.13_D0_75C_UV", "TY.14_D6_75C_UV", "TY.15_D9_75C_UV")) %>%
-  mutate(heat = fct_relevel(heat, "no heat", "75C")) 
 
-seconddiversity = ggplot(simsamps, aes(x = time, y = InvSimpson, fill = "black")) + geom_col() + 
+ggplot(secondsamps,aes(x=sample,y=InvSimpson)) + geom_col()
+
+
+simsamps = secondsamps %>%
+  # dplyr::filter(sample %in% c("TY.1_D0_NT", "TY.2_D6_Dry", "TY.3_D9_Dry",
+  #                             "TY.4_D0_75C", "TY.5_D6_75C", "TY.6_D9_75C",
+  #                             "TY.10_D0_UV", "TY.11_D6_UV", "TY.12_D9_UV",
+  #                             "TY.13_D0_75C_UV", "TY.14_D6_75C_UV", "TY.15_D9_75C_UV")) %>%
+  mutate(heat = fct_relevel(heat, "no heat", "75C"))
+
+seconddiversity = ggplot(simsamps, aes(x = time, y = InvSimpson, fill = "black")) + geom_col() +
   facet_grid(heat~uv) +
   scale_fill_manual(values = "skyblue3") +
-  theme(panel.border = element_blank(), 
+  theme(panel.border = element_blank(),
         panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         axis.line = element_line(color = "black"),
         axis.ticks.x = element_blank(), axis.text.x = element_text(), axis.title.x = element_blank(), strip.text.x = element_text(size = 9),
@@ -342,17 +374,30 @@ seconddiversity = ggplot(simsamps, aes(x = time, y = InvSimpson, fill = "black")
         plot.title = element_text(hjust = 0.5, size = 15), plot.subtitle = element_text(hjust = 0.5, size = 14),
         legend.position = "none",
         plot.margin = margin(t = 10, r = 20, l = 5, b = 10)) +
-  labs(x = "Storage Time", y = "Bacterial Diversity (invSimpson Index)", title = "Figure 6. Bacterial Diversity of Part Two Similar Samples", subtitle = "UV Treatment", 
-       tag = "Heat Treatment", 
-       caption = "Bar plot displays bacterial diversity, as measured by the inverse Simpson index, 
-       of the 12 similar samples in Part Two. Sample pairs are grouped by UV treatment (top facet) 
-       and heat reatment (right facet).") 
+  labs(x = "Storage Time", y = "Bacterial Diversity (invSimpson Index)", title = "Figure 6. Bacterial Diversity of Part Two Similar Samples", subtitle = "UV Treatment",
+       tag = "Heat Treatment",
+       caption = "Bar plot displays bacterial diversity, as measured by the inverse Simpson index,
+       of the 12 similar samples in Part Two. Sample pairs are grouped by UV treatment (top facet)
+       and heat reatment (right facet).")
 
 seconddiversity
 
-pdf("/Users/Tyler/Documents/Research/Regeneron/Graphs/6_secondsimdiversity.pdf", width = 6, height = 8)
+pdf("plots/6_secondsimdiversity.pdf", width = 6, height = 8)
 seconddiversity
 dev.off()
+
+
+
+# TESTING DIVERSITY DIFFERENCES #2 -------------------------------------------
+
+simsamps
+
+model <- invsamps %>%
+  mutate(time.cont=as.numeric(str_extract(time,"[0-9]+"))) %>%
+  lm(InvSimpson ~ time.cont,data=.)
+summary(model) #.4
+kruskal.test(InvSimpson ~ temp,data=invsamps) # 0.85
+
 
 # PART TWO ODDITIES DEEPER LOOK ------------------------------------------
 
