@@ -390,13 +390,20 @@ dev.off()
 
 # TESTING DIVERSITY DIFFERENCES #2 -------------------------------------------
 
-simsamps
+ss <- simsamps %>%
+  mutate(uv.dna=uv=="UV DNA",
+         ac=heat=="autoclave")
+kruskal.test(InvSimpson ~ heat, data=ss)
+kruskal.test(InvSimpson ~ uv, data=ss)
 
-model <- invsamps %>%
-  mutate(time.cont=as.numeric(str_extract(time,"[0-9]+"))) %>%
-  lm(InvSimpson ~ time.cont,data=.)
-summary(model) #.4
-kruskal.test(InvSimpson ~ temp,data=invsamps) # 0.85
+ss %>% filter(uv!="UV DNA") %>% 
+  kruskal.test(InvSimpson ~ ac, data=ss)
+
+ss %>% filter(heat=="no heat") %>% 
+  kruskal.test(InvSimpson ~ uv.dna, data=ss)
+
+# aov(InvSimpson ~ heat, data=simsamps) %>% summary()
+# aov(InvSimpson ~ uv, data=simsamps) %>% summary()
 
 
 # PART TWO ODDITIES DEEPER LOOK ------------------------------------------
