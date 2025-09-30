@@ -15,8 +15,7 @@ phy.tyler <- phy.tyler %>%
          time=factor(time,levels=c("day 0", "day 3", "day 6", "day 8", "day 9", "day 11")),
          sample_number=order(order(treatment,temp,time)),
          sample2=paste(treatment,temp,storage,time,sample_number,sep="|"),
-         sample2=fct_reordern(sample2,sample_number),
-         group=xxxx)
+         sample2=fct_reordern(sample2,sample_number))
 
 s <- phy.tyler %>% get.samp()
 phy.species <- phy.tyler %>% phy.collapse(taxranks=c("Superkingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"))
