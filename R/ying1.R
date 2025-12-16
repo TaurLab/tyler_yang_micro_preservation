@@ -443,3 +443,99 @@ g
 
 
 
+
+
+
+
+# visualize comparisons ---------------------------------------------------
+
+
+depict0 <- function(subsamps,phy=phy.tyler) {
+  
+  physub <- phy %>% filter(sample %in% subsamps)
+  bray <- calc.distance(physub,"bray")[1] %>% round(3)
+  bray.pct <- calc.distance(physub,"pct.bray")[1] %>% round(3)
+  horn <- calc.distance(physub,"horn")[1] %>% round(3)
+  taxhorn <- calc.distance(physub,"mean.horn")[1] %>% round(3)
+  # taxhorn <- calc.mean.distance2(physub,"horn") %>% round(3)
+  unfoldhorn <- calc.distance(physub,"unfold.horn")[1] %>% round(3)
+  
+  title <- str_glue("bray={bray}\npct.bray={bray.pct}\nhorn={horn},\ntaxhorn={taxhorn}\nunfoldhorn={unfoldhorn}")  
+  otusub <- get.otu.melt(physub,filter.zero = FALSE) %>%
+    mutate(sign=ifelse(sample==subsamps[1],1,-1),
+           y=sign*pctseqs) %>%
+    group_by(otu) %>%
+    mutate(y1=pctseqs[which(sample==subsamps[1])[1]],
+           y2=pctseqs[which(sample==subsamps[2])[1]]) %>%
+    ungroup() %>% 
+    arrange(y1,-y2) %>%
+    mutate(x=fct_inorder(otu))
+  
+  g.compare <- ggplot(otusub,aes(x=x,y=y,fill=otu)) + geom_col() +
+    scale_fill_taxonomy(data=otusub,fill=otu) +
+    scale_y_continuous(trans=log_epsilon_trans(0.001))
+  g.tax <- ggplot(otusub,aes(x=sample,y=pctseqs,fill=otu,label=Species)) + 
+    geom_taxonomy(width=0.5,show.ribbon = TRUE) +
+    ggtitle(title)
+  g.tax / g.compare
+}
+
+
+depict <- function(subsamps,phy=phy.tyler) {
+  
+  physub <- phy %>% filter(sample %in% subsamps)
+  # bray <- calc.distance(physub,"bray")[1] %>% round(3)
+  # bray.pct <- calc.distance(physub,"pct.bray")[1] %>% round(3)
+  # horn <- calc.distance(physub,"horn")[1] %>% round(3)
+  # taxhorn <- calc.distance(physub,"mean.horn")[1] %>% round(3)
+  # taxhorn <- calc.mean.distance2(physub,"horn") %>% round(3)
+  # unfoldhorn <- calc.distance(physub,"unfold.horn")[1] %>% round(3)
+  
+  # title <- str_glue("bray={bray}\npct.bray={bray.pct}\nhorn={horn},\ntaxhorn={taxhorn}\nunfoldhorn={unfoldhorn}")  
+  otusub <- get.otu.melt(physub,filter.zero = FALSE) %>%
+    mutate(sign=ifelse(sample==subsamps[1],1,-1),
+           y=sign*pctseqs) %>%
+    group_by(otu) %>%
+    mutate(y1=pctseqs[which(sample==subsamps[1])[1]],
+           y2=pctseqs[which(sample==subsamps[2])[1]]) %>%
+    ungroup() %>% 
+    arrange(y1,-y2) %>%
+    mutate(x=fct_inorder(otu))
+
+  s.counts <- otusub %>% 
+    mutate(sample=factor(sample,levels=subsamps)) %>%
+    arrange(sample) %>%
+    group_by(sample) %>%
+    summarize(seqs=sum(numseqs),
+              .groups="drop") %>%
+    mutate(text=str_glue("{sample}={pretty_number(seqs)}"))
+  title <- paste(s.counts$text,collapse="; ")
+
+  g.compare <- ggplot(otusub,aes(x=x,y=y,fill=otu)) + 
+    geom_col(show.legend=FALSE) +
+    scale_fill_taxonomy(data=otusub,fill=otu) +
+    scale_y_continuous(trans=log_epsilon_trans(0.001)) +
+    ggtitle(title)
+  # g.tax <- ggplot(otusub,aes(x=sample,y=pctseqs,fill=otu,label=Species)) + 
+  #   geom_taxonomy(width=0.5,show.ribbon = TRUE) +
+  #   ggtitle(title)
+  # g.tax / g.compare
+  g.compare
+}
+
+
+s <- phy.tyler %>% get.samp()
+#samp samp
+
+subsamps <- c("1A","1B")
+depict(subsamps)
+
+
+subsamps <- c("1A","TY.1_D0_NT")
+depict(subsamps)
+
+subsamps <- c("1A","TY.8_D6_AC")
+depict(subsamps)
+
+
+
