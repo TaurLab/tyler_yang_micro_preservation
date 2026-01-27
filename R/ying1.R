@@ -1,4 +1,5 @@
 
+
 # load data ---------------------------------------------------------------
 
 library(yingtools2)
@@ -819,8 +820,7 @@ g2 <- ggplot() +
            width=0.95,linewidth=0.75,linetype="longdash",color="blue",fill=NA) +
   facet_nested(treatmentlabel+treatment~timelabel+time) +
   scale_fill_taxonomy(data=otu2,fill=otu,
-                      guide=guide_taxonomy(ncol=4,downwards=TRUE),
-                      tax.palette = pal) +
+                      guide=guide_taxonomy(ncol=4,downwards=TRUE)) +
   theme(aspect.ratio=2.75,
         legend.key.size = unit(0.85,"lines"), # smaller if necessary
         legend.byrow=TRUE,
@@ -839,7 +839,6 @@ g2 <- ggplot() +
 g2
 
 g1 | g2
-
 
 # testing experiment 1 -----------------------------------------------------------------
 
@@ -903,7 +902,6 @@ plotit1 <- function(sampdata,var,eps=0,ymax=NULL) {
     theme(aspect.ratio=2)
 }
 
-
 phy1 <- phy.tyler %>% filter(experiment==1) %>%
   mutate(baseline=sample=="1A")
 s1 <- phy1 %>% 
@@ -919,13 +917,13 @@ s1 <- phy1 %>%
          temp.num=celsius,
          temp.rank=dense_rank(temp.num))
 
+
 testit1(s1,InvSimpson) # no diff
 testit1(s1,qpcr.totalseqs) # time
 testit1(s1,dist_mean.bray) # temp
 testit1(s1,dist_horn) # time
 testit1(s1,dist_mean.horn) # temp+time
 testit1(s1,dist_unfold.horn) # temp+time
-
 
 plotit1(s1,InvSimpson)
 plotit1(s1,qpcr.totalseqs,eps=100)
@@ -967,7 +965,8 @@ s2 <- phy2 %>% get.samp(stats=TRUE) %>%
          heat=fct_relevel(heat,"no heat"),
          heat.autoclave=heat=="autoclave",
          uv.dna=uv=="UV DNA",
-         qpcr.totalseqs=coalesce(qpcr.totalseqs,100))
+         qpcr.totalseqs=coalesce(qpcr.totalseqs,100),
+         log.qpcr.totalseqs=log(qpcr.totalseqs))
 
 testit2 <- function(sampdata,var) {
   var <- ensym(var)
@@ -1003,7 +1002,7 @@ testit2 <- function(sampdata,var) {
            time=findp(model,"time"),
            heat.75c=findp(model,"heat75C"),
            heat.autoclave=findp(model,"autoclave"),
-           uv.regular=findp(model,"uvUV"),
+           uv.regular=findp(model,"uvUV$"),
            uv.dna=findp(model,"dna"))
   return(tbl)
 }
@@ -1025,16 +1024,16 @@ plotit2 <- function(sampdata,var,eps=0,ymax=NULL) {
 }
 
 
-
-
-
+g2
 
 testit2(s2,InvSimpson) # no diff
 testit2(s2,qpcr.totalseqs) # heat.autoclave
+# testit2(s2,log.qpcr.totalseqs) # heat.autoclave
 testit2(s2,dist_mean.bray) # uv.reg, uv.dna
 testit2(s2,dist_horn) # time, heat.autoclave, uv.reg, uv.dna
 testit2(s2,dist_mean.horn) # time, heat.autoclave, uv.reg, uv.dna
 testit2(s2,dist_unfold.horn) # time, heat.autoclave, uv.reg, uv.dna
+
 
 
 plotit2(s2,InvSimpson)
