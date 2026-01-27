@@ -6,6 +6,7 @@ library(tidyverse)
 library(phyloseq)
 library(ggtree)
 library(glue)
+library(ggh4x)
 rm(list=ls())
 
 load("data/phy.tyler.RData")
@@ -23,7 +24,7 @@ phy.tyler <- phy.tyler %>%
          sample2=fct_reordern(sample2,sample_number),
          sample.comparator=ifelse(experiment==1,"1A","TY.1_D0_NT"))
 
-s <- phy.tyler %>% get.samp()o
+s <- phy.tyler %>% get.samp()
 
 phy.species <- phy.tyler %>% 
   phy.collapse(taxranks=c("Superkingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"))
@@ -98,81 +99,6 @@ ggplot(otu2,aes(x=factor(1),y=pctseqs,fill=otu,label=Species)) +
 # permanova, manova
 
 
-# tax stack 3 (more polished) -------------------------------------------------------------
-
-phy1 <- phy.tyler %>% 
-  filter(experiment==1)
-otu1 <- phy1 %>% 
-  get.otu.melt() %>%
-  mutate(time=recode2(time,c("day 0"="day 0\n(baseline)")))
-
-pal <- yt.palette3 %>% setNames(c("Bacteroidota (phylum)", "Lachnospiraceae (family)", "Oscillospiraceae (family)", 
-                                  "Eubacteriales (order)", "Actinomycetota (phylum)", "Enterococcus (genus)", 
-                                  "Streptococcus (genus)", "Staphylococcus (genus)", "Lactobacillus (genus)", 
-                                  "Pseudomonadota (phylum)", "Other Bacteria"))
-
-g1 <- ggplot(otu1) +
-  geom_taxonomy(aes(x = letter, y = pctseqs, fill = otu, label = Species)) +
-  facet_grid(temp ~ time) +
-  scale_fill_taxonomy(data=otu1,fill=otu,
-                      guide=guide_taxonomy(ncol=4,downwards=TRUE),
-                      tax.palette = pal) +
-  
-  theme(aspect.ratio=2,
-        legend.key.size = unit(0.85,"lines"), # smaller if necessary
-        legend.byrow=TRUE,
-        legend.title.position="right",
-        legend.title=element_text(angle=-90),
-        legend.text.position="bottom",
-        legend.text=element_text(angle=-90,hjust=0,vjust=0.5),
-        legend.key.spacing.x=unit(0,"lines"),
-        legend.key.spacing.y=unit(0.5,"lines"),
-        # legend.position = c(0.125,0.375),
-        axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        panel.background = element_blank()) +
-  labs(fill="Bacterial Taxa")
-g1
-
-g1t <- gtable::as.gtable(g1)
-g1t$widths[8] <- grid::unit(35,"points")
-plot(g1t)
-
-
-
-phy2 <- phy.tyler %>%
-  filter(experiment==2)
-otu2 <- phy2 %>% get.otu.melt() %>%
-  group_by(treatment,time) %>%
-  mutate(sample.number=as.numeric(factor(sample))) %>%
-  ungroup() 
-g2
-g2 <- ggplot(otu2,aes(x=factor(1),y=pctseqs,fill=otu,label=Species)) + 
-  geom_taxonomy() +
-  facet_grid(treatment~time) +
-  scale_fill_taxonomy(data=otu2,fill=otu,
-                      guide=guide_taxonomy(ncol=4,downwards=TRUE),
-                      tax.palette = pal) +
-  theme(aspect.ratio=2,
-        legend.key.size = unit(0.85,"lines"), # smaller if necessary
-        legend.byrow=TRUE,
-        legend.title.position="right",
-        legend.title=element_text(angle=-90),
-        legend.text.position="bottom",
-        legend.text=element_text(angle=-90,hjust=0,vjust=0.5),
-        legend.key.spacing.x=unit(0,"lines"),
-        legend.key.spacing.y=unit(0.5,"lines"),
-        # legend.position = c(0.125,0.375),
-        axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        panel.background = element_blank()) +
-  labs(fill="Bacterial Taxa")
-g2
-g2t <- gtable::as.gtable(g2)
-
-gridExtra::grid.arrange(g1t,g2,nrow=1)
 
 
 # show distances -------------------------------------------------------------------
@@ -622,177 +548,6 @@ lda <- lda.effect(phy.lefse,class="disrupt",subclass="time01")
 
 
 
-
-
-
-# testing experiment 1 -----------------------------------------------------------------
-
-
-
-add_dist1 <- function(sampdata,method,sample0="1A",phy=phy1) {
-  varname <- paste0("dist_",method)
-  dist <- phy.tyler %>%
-    calc.distance(method=method)  
-  pw <- dist %>% get.pairwise() %>%
-    filter(sample1==sample0|sample2==sample0) %>%
-    mutate(sample=coalesce(na_if(sample1,sample0),sample2)) %>%
-    select(sample,!!varname:=dist)  
-  sampdata %>% left_join(pw,by="sample")
-}
-testit1 <- function(sampdata,var) {
-  var <- ensym(var)
-  findp <- function(models,text) {
-    models %>% map_lgl(~{
-      pvals <- .x %>% filter(term %ilike% text) %>% pull(p.value)
-      if (length(pvals)==0) {
-        NA
-      } else {
-        any(pvals<=0.05)
-      }
-    })
-  }
-  tests <- rlang::inject(
-    list(
-      !!var ~ time,
-      !!var ~ time.num,
-      !!var ~ time.rank,
-      !!var ~ temp,
-      !!var ~ temp.num,
-      !!var ~ temp.rank,
-      !!var ~ time+temp,
-      !!var ~ time.num+temp.num,
-      !!var ~ time.rank+temp.rank
-    )
-  )
-  tbl <- tibble(formula=tests) %>%
-    mutate(test=map_chr(formula,deparse1),
-           model=map(formula,~{
-             broom::tidy(lm(.x,data=sampdata))
-           }),
-           temp=findp(model,"temp"),
-           time=findp(model,"time"))
-  return(tbl)
-}
-
-phy1 <- phy.tyler %>% filter(experiment==1)
-s1 <- phy1 %>% 
-  get.samp(stats=TRUE) %>%
-  add_dist1("mean.bray") %>%
-  add_dist1("horn") %>%
-  add_dist1("mean.horn") %>%
-  add_dist1("unfold.horn") %>%
-  mutate(days=as.numeric(str_replace(time,"day ","")),
-         celsius=ifelse(temp=="room temp",20,as.numeric(str_replace(temp,"C",""))),
-         time.num=days,
-         time.rank=dense_rank(days),
-         temp.num=celsius,
-         temp.rank=dense_rank(temp.num))
-
-testit1(s1,InvSimpson)
-testit1(s1,qpcr.totalseqs) # time
-testit1(s1,dist_mean.bray) # temp
-testit1(s1,dist_horn) # time
-testit1(s1,dist_mean.horn) # temp+time
-testit1(s1,dist_unfold.horn) # temp+time
-
-
-
-
-
-# testing experiment 2 ----------------------------------------------------
-
-
-
-add_dist2 <- function(sampdata,method,sample0="TY.1_D0_NT",phy=phy2) {
-  varname <- paste0("dist_",method)
-  dist <- phy.tyler %>%
-    calc.distance(method=method)  
-  pw <- dist %>% get.pairwise() %>%
-    filter(sample1==sample0|sample2==sample0) %>%
-    mutate(sample=coalesce(na_if(sample1,sample0),sample2)) %>%
-    select(sample,!!varname:=dist)  
-  sampdata %>% left_join(pw,by="sample")
-}
-
-
-phy2 <- phy.tyler %>% filter(experiment==2) 
-s2 <- phy2 %>% get.samp(stats=TRUE) %>%
-  add_dist2("mean.bray") %>%
-  add_dist2("horn") %>%
-  add_dist2("mean.horn") %>%
-  add_dist2("unfold.horn") %>%
-  mutate(time.num=as.numeric(str_replace(time,"day ","")),
-         time.rank=dense_rank(time.num),
-         uv=fct_relevel(uv,"no UV"),
-         heat=fct_relevel(heat,"no heat"),
-         heat.autoclave=heat=="autoclave",
-         uv.dna=uv=="UV DNA",
-         qpcr.totalseqs=coalesce(qpcr.totalseqs,1))
-
-
-testit2 <- function(sampdata,var) {
-  var <- ensym(var)
-  tests <- rlang::inject(
-    list(
-      !!var ~ time,
-      !!var ~ time.num,
-      !!var ~ time.rank,
-      !!var ~ uv,
-      !!var ~ uv.dna,
-      !!var ~ heat,
-      !!var ~ heat.autoclave,
-      !!var ~ time+uv+heat,
-      !!var ~ time.num+uv+heat,
-      !!var ~ time.rank+uv+heat,
-      !!var ~ time.rank+uv.dna+heat.autoclave
-    )
-  )
-  
-  findp <- function(models,text) {
-    models %>% map_lgl(~{
-      pvals <- .x %>% filter(term %ilike% text) %>% pull(p.value)
-      if (length(pvals)==0) {
-        NA
-      } else {
-        any(pvals<=0.05)
-      }
-    })
-  }
-  tbl <- tibble(formula=tests) %>%
-    mutate(test=map_chr(formula,deparse1),
-           model=map(formula,~{broom::tidy(lm(.x,data=sampdata))}),
-           time=findp(model,"time"),
-           heat.75c=findp(model,"heat75C"),
-           heat.autoclave=findp(model,"autoclave"),
-           uv.regular=findp(model,"uvUV"),
-           uv.dna=findp(model,"dna"))
-  return(tbl)
-}
-plotit2 <- function(sampdata,var,eps=0) {
-  var <- enquo(var)
-  ggplot(sampdata) + 
-    geom_col(aes(x=time,y=!!var,fill=treatment)) +
-    facet_grid(uv~heat) + 
-    scale_y_continuous(trans=log_epsilon_trans(eps))
-}
-
-
-
-testit2(s2,InvSimpson)
-testit2(s2,qpcr.totalseqs) # heat.autoclave
-testit2(s2,dist_mean.bray) # uv.reg, uv.dna
-testit2(s2,dist_horn) # time, heat.autoclave, uv.reg, uv.dna
-testit2(s2,dist_mean.horn) # time, heat.autoclave, uv.reg, uv.dna
-testit2(s2,dist_unfold.horn) # time, heat.autoclave, uv.reg, uv.dna
-
-plotit2(s2,InvSimpson)
-plotit2(s2,qpcr.totalseqs,eps=1000) 
-plotit2(s2,dist_mean.bray) 
-plotit2(s2,dist_horn)  
-plotit2(s2,dist_mean.horn) 
-plotit2(s2,dist_unfold.horn)  
-
-
 # visualize comparisons ---------------------------------------------------
 
 
@@ -1010,23 +765,400 @@ geom_bracket()
 
 
 
+# tax stack 3 (more polished) -------------------------------------------------------------
+
+phy1 <- phy.tyler %>% 
+  filter(experiment==1) %>%
+  mutate(baseline=sample=="1A",
+         timelabel="Time",
+         templabel="Temp")
+otu1 <- phy1 %>% 
+  get.otu.melt()
+s1 <- phy1 %>% get.samp()
+
+g1 <- ggplot() +
+  geom_taxonomy(data=otu1,aes(x = letter, y = pctseqs, 
+                              fill = otu, label = Species)) +
+  geom_col(data=filter(s1,baseline),aes(x=letter,y=1),
+           width=0.95,linewidth=0.75,linetype="longdash",color="blue",fill=NA) +
+  # facet_grid(temp ~ time) +
+  facet_nested(templabel+temp ~ timelabel+time) +
+  scale_fill_taxonomy(name="Bacterial Taxa", data=otu1, fill=otu,
+                      guide=guide_taxonomy(ncol=4,downwards=TRUE)) +
+  theme(aspect.ratio=1.75,
+        legend.key.size = unit(0.85,"lines"), # smaller if necessary
+        legend.byrow=TRUE,
+        legend.title.position="right",
+        legend.title=element_text(angle=-90),
+        legend.text.position="bottom",
+        legend.text=element_text(angle=-90,hjust=0,vjust=0.5),
+        legend.key.spacing.x=unit(0,"lines"),
+        legend.key.spacing.y=unit(0.5,"lines"),
+        # panel.spacing.x = unit(c(35,5.5,5.5),"points"),
+        axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(),
+        panel.background = element_blank())
+g1
+
+
+
+phy2 <- phy.tyler %>%
+  filter(experiment==2) %>%
+  mutate(baseline=sample=="TY.1_D0_NT",
+         timelabel="Time",
+         treatmentlabel="Treatment")
+
+otu2 <- phy2 %>% get.otu.melt() %>%
+  group_by(treatment,time) %>%
+  mutate(sample.number=as.numeric(factor(sample))) %>%
+  ungroup() 
+s2 <- phy2 %>% get.samp()
+
+g2 <- ggplot() + 
+  geom_taxonomy(data=otu2,aes(x=factor(1),y=pctseqs,fill=otu,label=Species)) +
+  geom_col(data=filter(s2,baseline),aes(x=factor(1),y=1),
+           width=0.95,linewidth=0.75,linetype="longdash",color="blue",fill=NA) +
+  facet_nested(treatmentlabel+treatment~timelabel+time) +
+  scale_fill_taxonomy(data=otu2,fill=otu,
+                      guide=guide_taxonomy(ncol=4,downwards=TRUE),
+                      tax.palette = pal) +
+  theme(aspect.ratio=2.75,
+        legend.key.size = unit(0.85,"lines"), # smaller if necessary
+        legend.byrow=TRUE,
+        legend.title.position="right",
+        legend.title=element_text(angle=-90),
+        legend.text.position="bottom",
+        legend.text=element_text(angle=-90,hjust=0,vjust=0.5),
+        legend.key.spacing.x=unit(0,"lines"),
+        legend.key.spacing.y=unit(0.5,"lines"),
+        # legend.position = c(0.125,0.375),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        panel.background = element_blank()) +
+  labs(fill="Bacterial Taxa")
+g2
+
+g1 | g2
+
+
+# testing experiment 1 -----------------------------------------------------------------
+
+add_dist1 <- function(sampdata,method,sample0="1A",phy=phy1) {
+  varname <- paste0("dist_",method)
+  dist <- phy.tyler %>%
+    calc.distance(method=method)  
+  pw <- dist %>% get.pairwise() %>%
+    filter(sample1==sample0|sample2==sample0) %>%
+    mutate(sample=coalesce(na_if(sample1,sample0),sample2)) %>%
+    select(sample,!!varname:=dist)  
+  sampdata %>% left_join(pw,by="sample")
+}
+testit1 <- function(sampdata,var) {
+  var <- ensym(var)
+  findp <- function(models,text) {
+    models %>% map_lgl(~{
+      pvals <- .x %>% filter(term %ilike% text) %>% pull(p.value)
+      if (length(pvals)==0) {
+        NA
+      } else {
+        any(pvals<=0.05)
+      }
+    })
+  }
+  tests <- rlang::inject(
+    list(
+      !!var ~ time,
+      !!var ~ time.num,
+      !!var ~ time.rank,
+      !!var ~ temp,
+      !!var ~ temp.num,
+      !!var ~ temp.rank,
+      !!var ~ time+temp,
+      !!var ~ time.num+temp.num,
+      !!var ~ time.rank+temp.rank
+    )
+  )
+  tbl <- tibble(formula=tests) %>%
+    mutate(test=map_chr(formula,deparse1),
+           model=map(formula,~{
+             broom::tidy(lm(.x,data=sampdata))
+           }),
+           temp=findp(model,"temp"),
+           time=findp(model,"time"))
+  return(tbl)
+}
+plotit1 <- function(sampdata,var,eps=0,ymax=NULL) {
+  if (!is.null(ymax)) {
+    ymax <- expand_limits(y=ymax)
+  }
+  var <- enquo(var)
+  ggplot(sampdata) +
+    ymax +
+    geom_col(aes(x=letter,y=!!var,
+                 color=baseline),linetype="longdash",linewidth=0.75,
+             show.legend=FALSE) +
+    scale_color_manual(values=c("TRUE"="blue","FALSE"=NA)) +
+    scale_y_continuous(trans=log_epsilon_trans(epsilon = eps)) +
+    facet_grid(temp ~ time) +
+    theme(aspect.ratio=2)
+}
+
+
+phy1 <- phy.tyler %>% filter(experiment==1) %>%
+  mutate(baseline=sample=="1A")
+s1 <- phy1 %>% 
+  get.samp(stats=TRUE) %>%
+  add_dist1("mean.bray") %>%
+  add_dist1("horn") %>%
+  add_dist1("mean.horn") %>%
+  add_dist1("unfold.horn") %>%
+  mutate(days=as.numeric(str_replace(time,"day ","")),
+         celsius=ifelse(temp=="room temp",20,as.numeric(str_replace(temp,"C",""))),
+         time.num=days,
+         time.rank=dense_rank(days),
+         temp.num=celsius,
+         temp.rank=dense_rank(temp.num))
+
+testit1(s1,InvSimpson) # no diff
+testit1(s1,qpcr.totalseqs) # time
+testit1(s1,dist_mean.bray) # temp
+testit1(s1,dist_horn) # time
+testit1(s1,dist_mean.horn) # temp+time
+testit1(s1,dist_unfold.horn) # temp+time
+
+
+plotit1(s1,InvSimpson)
+plotit1(s1,qpcr.totalseqs,eps=100)
+plotit1(s1,dist_horn,ymax=1)
+plotit1(s1,dist_mean.horn,ymax=1)
+plotit1(s1,dist_unfold.horn,ymax=1)
+# plotit1(s1,dist_horn,ymax=0.5)
+# plotit1(s1,dist_mean.horn,ymax=0.5)
+# plotit1(s1,dist_unfold.horn,ymax=0.5)
+
+
+
+# testing experiment 2 ----------------------------------------------------
+
+
+
+add_dist2 <- function(sampdata,method,sample0="TY.1_D0_NT",phy=phy2) {
+  varname <- paste0("dist_",method)
+  dist <- phy.tyler %>%
+    calc.distance(method=method)  
+  pw <- dist %>% get.pairwise() %>%
+    filter(sample1==sample0|sample2==sample0) %>%
+    mutate(sample=coalesce(na_if(sample1,sample0),sample2)) %>%
+    select(sample,!!varname:=dist)  
+  sampdata %>% left_join(pw,by="sample")
+}
+
+
+phy2 <- phy.tyler %>% filter(experiment==2) %>%
+  mutate(baseline=sample=="TY.1_D0_NT")
+s2 <- phy2 %>% get.samp(stats=TRUE) %>%
+  add_dist2("mean.bray") %>%
+  add_dist2("horn") %>%
+  add_dist2("mean.horn") %>%
+  add_dist2("unfold.horn") %>%
+  mutate(time.num=as.numeric(str_replace(time,"day ","")),
+         time.rank=dense_rank(time.num),
+         uv=fct_relevel(uv,"no UV"),
+         heat=fct_relevel(heat,"no heat"),
+         heat.autoclave=heat=="autoclave",
+         uv.dna=uv=="UV DNA",
+         qpcr.totalseqs=coalesce(qpcr.totalseqs,100))
+
+testit2 <- function(sampdata,var) {
+  var <- ensym(var)
+  tests <- rlang::inject(
+    list(
+      !!var ~ time,
+      !!var ~ time.num,
+      !!var ~ time.rank,
+      !!var ~ uv,
+      !!var ~ uv.dna,
+      !!var ~ heat,
+      !!var ~ heat.autoclave,
+      !!var ~ time+uv+heat,
+      !!var ~ time.num+uv+heat,
+      !!var ~ time.rank+uv+heat,
+      !!var ~ time.rank+uv.dna+heat.autoclave
+    )
+  )
+  
+  findp <- function(models,text) {
+    models %>% map_lgl(~{
+      pvals <- .x %>% filter(term %ilike% text) %>% pull(p.value)
+      if (length(pvals)==0) {
+        NA
+      } else {
+        any(pvals<=0.05)
+      }
+    })
+  }
+  tbl <- tibble(formula=tests) %>%
+    mutate(test=map_chr(formula,deparse1),
+           model=map(formula,~{broom::tidy(lm(.x,data=sampdata))}),
+           time=findp(model,"time"),
+           heat.75c=findp(model,"heat75C"),
+           heat.autoclave=findp(model,"autoclave"),
+           uv.regular=findp(model,"uvUV"),
+           uv.dna=findp(model,"dna"))
+  return(tbl)
+}
+plotit2 <- function(sampdata,var,eps=0,ymax=NULL) {
+  var <- enquo(var)
+  
+  if (!is.null(ymax)) {
+    ymax <- expand_limits(y=ymax)
+  }
+  ggplot(sampdata) + 
+    ymax +
+    geom_col(aes(x=factor(1),y=!!var,
+                 color=baseline),linetype="longdash",linewidth=0.75,
+             show.legend=FALSE) +
+    scale_color_manual(values=c("TRUE"="blue","FALSE"=NA)) +
+    facet_grid(treatment~time) + 
+    scale_y_continuous(trans=log_epsilon_trans(eps)) +
+    theme(aspect.ratio=2)
+}
 
 
 
 
 
 
+testit2(s2,InvSimpson) # no diff
+testit2(s2,qpcr.totalseqs) # heat.autoclave
+testit2(s2,dist_mean.bray) # uv.reg, uv.dna
+testit2(s2,dist_horn) # time, heat.autoclave, uv.reg, uv.dna
+testit2(s2,dist_mean.horn) # time, heat.autoclave, uv.reg, uv.dna
+testit2(s2,dist_unfold.horn) # time, heat.autoclave, uv.reg, uv.dna
+
+
+plotit2(s2,InvSimpson)
+plotit2(s2,qpcr.totalseqs,eps=10000) 
+plotit2(s2,dist_mean.bray) 
+plotit2(s2,dist_horn)  
+plotit2(s2,dist_mean.horn) 
+plotit2(s2,dist_unfold.horn)  
+
+
+# asv comparisons --------------------------------------------------------------
 
 
 
 
+phy1 <- phy.tyler %>% filter(experiment==1) %>%
+  mutate(baseline=sample=="1A",
+         templabel="Temp",
+         timelabel="Time")
+
+
+otu1base <- phy1 %>% 
+  filter(baseline,prune_unused_taxa=FALSE) %>%
+  get.otu.melt(filter.zero=FALSE) %>%
+  transmute(otu,pctseqs0=pctseqs)
+
+otu1 <- phy1 %>% 
+  get.otu.melt(filter.zero=FALSE) %>%
+  left_join(otu1base,by="otu") %>%
+  filter(pctseqs>0|pctseqs0>0) %>%
+  group_by(sample) %>%
+  arrange(desc(pctseqs0),desc(pctseqs)) %>%
+  mutate(col=row_number(),
+         extra=pctseqs0==0 & pctseqs>0) %>%
+  ungroup()
+s1 <- phy1 %>% get.samp()
+
+g1.asv <- ggplot() +
+  geom_col(data=otu1,aes(x=col,y=pctseqs,fill=otu)) +
+  geom_step(data=otu1,aes(x=col,y=pctseqs0),direction="mid") +
+  # geom_step(data=otu1,aes(x=col,y=pctseqs0),direction="mid") +
+  geom_text(data=s1,aes(x=Inf,y=Inf,label=sample),hjust=1,vjust=1,color="blue") +
+  geom_rect(data=filter(otu1,baseline),
+            aes(xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=Inf),
+            fill=NA,color="blue",linetype="longdash") +
+  geom_bracket(data=filter(otu1,extra),
+               aes(x=col,y=ave(pctseqs,sample,FUN=max),
+                   fontsize=3,label="unique\nASVs"),tip="square") + 
+  scale_fill_taxonomy(data=otu1,fill=otu) +
+  scale_y_continuous(trans=log_epsilon_trans(0.001)) +
+  facet_nested(templabel+temp+letter~timelabel+time)
+g1.asv
 
 
 
 
+phy2 <- phy.tyler %>% filter(experiment==2) %>%
+  mutate(baseline=sample=="TY.1_D0_NT")
+otu2base <- phy2 %>% 
+  filter(baseline,prune_unused_taxa=FALSE) %>%
+  get.otu.melt(filter.zero=FALSE) %>%
+  transmute(otu,pctseqs0=pctseqs)
+
+otu2 <- phy2 %>% 
+  get.otu.melt(filter.zero=FALSE) %>%
+  left_join(otu2base,by="otu") %>%
+  filter(pctseqs>0|pctseqs0>0) %>%
+  group_by(sample) %>%
+  arrange(desc(pctseqs0),desc(pctseqs)) %>%
+  mutate(col=row_number(),
+         extra=pctseqs0==0 & pctseqs>0) %>%
+  ungroup()
+s2 <- phy2 %>% get.samp()
+g2.asv <- ggplot() +
+  geom_col(data=otu2,aes(x=col,y=pctseqs,fill=otu)) +
+  geom_step(data=otu2,aes(x=col,y=pctseqs0),direction="mid") +
+  # geom_step(data=otu2,aes(x=col,y=pctseqs0),direction="mid") +
+  geom_text(data=s2,aes(x=Inf,y=Inf,label=sample),hjust=1,vjust=1,color="blue") +
+  geom_rect(data=filter(otu2,baseline),
+            aes(xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=Inf),
+            fill=NA,color="blue",linetype="longdash") +
+  geom_bracket(data=filter(otu2,extra),
+               aes(x=col,y=ave(pctseqs,sample,FUN=max),
+                   fontsize=3,label="unique\nASVs"),tip="square") + 
+  scale_fill_taxonomy(data=otu2,fill=otu) +
+  scale_y_continuous(trans=log_epsilon_trans(0.001)) +
+  facet_nested(treatment~time)
+g2.asv
+
+
+# compare unique asvs -----------------------------------------------------
 
 
 
+compare.uniques <- function(sample1,sample2,phy=phy.tyler) {
+  physub <- prune_samples(c(sample1,sample2),phy)
+  ranks <- rank_names(physub)
+  otusub <- physub %>% get.otu.melt() %>%
+    group_by(otu) %>%
+    mutate(unique=n()==1) %>%
+    ungroup() %>% 
+    mutate(otu=fct_reordern(otu,!!!syms(ranks)),
+           col=as.numeric(otu)) 
+
+  ggplot(otusub,aes(x=col,y=pctseqs)) + 
+    geom_col(aes(alpha=unique,fill=otu)) +
+    geom_point(data=filter(otusub,unique),aes(x=col,y=pctseqs),color="green",size=0.5) +
+    scale_fill_taxonomy(data=otusub,fill=otu) +
+    # scale_color_manual(values=c("TRUE"="red","FALSE"=NA)) +
+    scale_alpha_manual(values=c("TRUE"=1,"FALSE"=0.4)) +
+    scale_y_continuous(trans=log_epsilon_trans(0.001)) +
+    facet_grid(sample ~ .)
+}
+
+compare.uniques("1A","1B")
+
+
+compare.uniques("TY.1_D0_NT","TY.14_D6_75C_UV")
+
+compare.uniques("TY.1_D0_NT","TY.17_D6_AC_UV")
+
+
+compare.uniques("TY.1_D0_NT","TY.17_D6_AC_UV") +
+  coord_cartesian(xlim=c(100,400))
 
 
 
