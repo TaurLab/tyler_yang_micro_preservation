@@ -903,7 +903,12 @@ plotit1 <- function(sampdata,var,eps=0,ymax=NULL) {
 }
 
 phy1 <- phy.tyler %>% filter(experiment==1) %>%
-  mutate(baseline=sample=="1A")
+  mutate(baseline=sample=="1A") %>%
+  add.abundance(pct.anaerobe=Class=="Clostridia" |
+                  Class=="Negativicutes" |
+                  Phylum=="Fusobacteria" |
+                  Phylum=="Bacteroidetes",denom=TRUE)
+
 s1 <- phy1 %>% 
   get.samp(stats=TRUE) %>%
   add_dist1("mean.bray") %>%
@@ -924,6 +929,7 @@ testit1(s1,dist_mean.bray) # temp
 testit1(s1,dist_horn) # time
 testit1(s1,dist_mean.horn) # temp+time
 testit1(s1,dist_unfold.horn) # temp+time
+testit1(s1,pct.anaerobe)
 
 plotit1(s1,InvSimpson)
 plotit1(s1,qpcr.totalseqs,eps=100)
