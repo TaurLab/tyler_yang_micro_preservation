@@ -11,10 +11,14 @@ library(ggh4x)
 rm(list=ls())
 
 load("data/phy.tyler.RData")
-phy.tyler <- phy.tyler %>% 
-  select(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species) 
+load("data/phy.tyler.additional.RData")
+
 
 phy.tyler <- phy.tyler %>% 
+  select(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species)
+
+s.tyler <- phy.tyler %>% get.samp() %>%
+  left_join(trace_tbl.tyler,by="sample") %>%
   mutate(temp=ifelse(sample %in% c("1A","1B"),"-80C",temp),
          temp=factor(temp,levels=c("-80C", "-20C", "4C", "room temp")),
          time=factor(time,levels=c("day 0", "day 3", "day 6", "day 8", "day 9", "day 11")),
@@ -24,8 +28,7 @@ phy.tyler <- phy.tyler %>%
          sample2=paste(treatment,temp,storage,time,sample_number,sep="|"),
          sample2=fct_reordern(sample2,sample_number),
          sample.comparator=ifelse(experiment==1,"1A","TY.1_D0_NT"))
-
-s <- phy.tyler %>% get.samp()
+sample_data(phy.tyler) <- s.tyler %>% set.samp()
 
 phy.species <- phy.tyler %>% 
   phy.collapse(taxranks=c("Superkingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"))
@@ -1081,7 +1084,8 @@ g1.asv <- ggplot() +
   geom_col(data=otu1,aes(x=col,y=pctseqs,fill=otu)) +
   geom_step(data=otu1,aes(x=col,y=pctseqs0),direction="mid") +
   # geom_step(data=otu1,aes(x=col,y=pctseqs0),direction="mid") +
-  geom_text(data=s1,aes(x=Inf,y=Inf,label=sample),hjust=1,vjust=1,color="blue") +
+  geom_text(data=s1,aes(x=Inf,y=Inf,label=str_glue("{sample}\n{short_number(nseqs)} seqs")),hjust=1,vjust=1,color="blue") +
+  # geom_text(data=s2,aes(x=Inf,y=Inf,label=str_glue("{sample}\n{short_number(nseqs)} seqs")),hjust=1,vjust=1,color="blue") +
   geom_rect(data=filter(otu1,baseline),
             aes(xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=Inf),
             fill=NA,color="blue",linetype="longdash") +
@@ -1117,7 +1121,7 @@ g2.asv <- ggplot() +
   geom_col(data=otu2,aes(x=col,y=pctseqs,fill=otu)) +
   geom_step(data=otu2,aes(x=col,y=pctseqs0),direction="mid") +
   # geom_step(data=otu2,aes(x=col,y=pctseqs0),direction="mid") +
-  geom_text(data=s2,aes(x=Inf,y=Inf,label=sample),hjust=1,vjust=1,color="blue") +
+  geom_text(data=s2,aes(x=Inf,y=Inf,label=str_glue("{sample}\n{short_number(nseqs)} seqs")),hjust=1,vjust=1,color="blue") +
   geom_rect(data=filter(otu2,baseline),
             aes(xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=Inf),
             fill=NA,color="blue",linetype="longdash") +
@@ -1137,13 +1141,17 @@ g2.asv
 compare.uniques <- function(sample1,sample2,phy=phy.tyler) {
   physub <- prune_samples(c(sample1,sample2),phy)
   ranks <- rank_names(physub)
+  
+  if (nsamples(physub)!=2) {
+    cli::cli_abort("YTError: this isn't 2 samples")
+  }
   otusub <- physub %>% get.otu.melt() %>%
     group_by(otu) %>%
     mutate(unique=n()==1) %>%
     ungroup() %>% 
     mutate(otu=fct_reordern(otu,!!!syms(ranks)),
            col=as.numeric(otu)) 
-
+  
   ggplot(otusub,aes(x=col,y=pctseqs)) + 
     geom_col(aes(alpha=unique,fill=otu)) +
     geom_point(data=filter(otusub,unique),aes(x=col,y=pctseqs),color="green",size=0.5) +
@@ -1154,16 +1162,111 @@ compare.uniques <- function(sample1,sample2,phy=phy.tyler) {
     facet_grid(sample ~ .)
 }
 
+
 compare.uniques("1A","1B")
-
-
 compare.uniques("TY.1_D0_NT","TY.14_D6_75C_UV")
-
 compare.uniques("TY.1_D0_NT","TY.17_D6_AC_UV")
-
-
+compare.uniques("TY.1_D0_NT","TY.17_D6_AC_UV")
+compare.uniques("TY.1_D0_NT","TY.16_D0_AC_UV")
 compare.uniques("TY.1_D0_NT","TY.17_D6_AC_UV") +
   coord_cartesian(xlim=c(100,400))
 
+
+
+
+dna.color <- function(seq) {
+  seq <- as.character(seq)
+  # base.recodes <- c("A"="#ffafaf", "T"="#ffd7af", "C"="#afffaf", "G"="#afffff")
+  base.recodes <- c("A"="red",
+                    "T"="orange",
+                    "C"="green",
+                    "G"="blue")
+  recodes <- imap_chr(base.recodes,~str_glue("<span style='color: {.x};'>{.y}</span>"))
+  newseq <- seq
+  for (i in seq_along(recodes)) {
+    base <- names(recodes)[i]
+    newbase <- recodes[i]
+    newseq <- str_replace_all(newseq,fixed(base),newbase)
+  }
+  newseq
+}
+
+compare.uniques2 <- function(sample1,sample2,phy=phy.tyler,circular=TRUE) {
+  physub <- prune_samples(c(sample1,sample2),phy) %>%
+    prune_unused_taxa()
+  otusub <- physub %>% get.otu.melt(filter.zero=FALSE) %>%
+    mutate(col=ifelse(sample==sample1,"base","compare")) %>%
+    pivot_wider(id_cols=otu,names_from=col,values_from=pctseqs) %>%
+    mutate(status=case_when(
+      compare>0 & base>0 ~ "both",
+      compare>0 & base==0 ~ "base",
+      compare==0 & base>0 ~ "compare"),
+      has.base=base>0,
+      has.compare=compare>0) %>%
+    rename(label=otu)
+  seq <- refseq(physub) %>%
+    as.character() %>%
+    tibble(seq=.,label=names(.))
+  
+  tr <- phy_tree(physub)
+  gt <- ggtree(tr) %<+% get.tax(physub)  
+  gd <- gt$data %>% filter(isTip) %>%
+    left_join(otusub,by="label") %>%
+    left_join(seq,by="label") %>%
+    mutate(xmax=max(x)) %>%
+    arrange(!has.base)
+  
+  g <- gt +
+    expand_limits(x=1) +
+    geom_point(data=gd,aes(x=x,y=y,fill=label,size=has.base,shape=status),alpha=0.75) +
+    geom_point(data=gd,aes(x=xmax,y=y,fill=label,size=has.base,shape=status),alpha=0.75) +
+    geom_text(data=gd,aes(x=xmax+0.0025,y=y,label=seq,color=has.base),size=1.5,hjust=0) +
+    geom_text(data=gd,aes(x=x+0.0025,y=y,label=Species,color=has.base),size=1.5,hjust=0) +
+    # geom_richtext(data=slice(gd,1:10),aes(x=xmax,y=y,label=dna.color(seq)),size=1.5,hjust=0,fill=NA,label.color=NA) +
+    scale_color_manual(values=c("TRUE"="black","FALSE"="gray")) +
+    scale_shape_manual(values=c("both"=25,"base"=21,"compare"=22)) +
+    scale_size_manual(values=c("TRUE"=3,"FALSE"=1)) +
+    scale_fill_taxonomy(data=gd,fill=label)
+  g
+}
+
+
+compare.uniques2("TY.1_D0_NT","TY.16_D0_AC_UV")
+
+pdf("plots/compare.tree.TY.16_D0_AC_UV.pdf",width=20,height=50)
+compare.uniques2("TY.1_D0_NT","TY.16_D0_AC_UV")
+dev.off()
+shell.exec("plots/compare.tree.TY.16_D0_AC_UV.pdf")
+
+
+pdf("plots/compare.tree.TY.21_D9_DNA_UV.pdf",width=20,height=50)
+compare.uniques2("TY.1_D0_NT","TY.21_D9_DNA_UV")
+dev.off()
+shell.exec("plots/compare.tree.TY.21_D9_DNA_UV.pdf")
+
+
+
+pdf("plots/compare.tree.TY.20_D6_DNA_UV.pdf",width=20,height=50)
+compare.uniques2("TY.1_D0_NT","TY.20_D6_DNA_UV")
+dev.off()
+shell.exec("plots/compare.tree.TY.20_D6_DNA_UV.pdf")
+
+# some seq errors
+pdf("plots/compare.tree.TY.15_D9_75C_UV.pdf",width=20,height=50)
+compare.uniques2("TY.1_D0_NT","TY.15_D9_75C_UV")
+dev.off()
+shell.exec("plots/compare.tree.TY.15_D9_75C_UV.pdf")
+
+
+pdf("plots/compare.tree.TY.2_D6_Dry.pdf",width=20,height=50)
+compare.uniques2("TY.1_D0_NT","TY.2_D6_Dry")
+dev.off()
+shell.exec("plots/compare.tree.TY.2_D6_Dry.pdf")
+
+
+pdf("plots/compare.tree.1B.pdf",width=20,height=50)
+compare.uniques2("1A","1B")
+dev.off()
+shell.exec("plots/compare.tree.1B.pdf")
 
 
