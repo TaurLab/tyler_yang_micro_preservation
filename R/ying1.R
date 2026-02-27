@@ -944,9 +944,7 @@ plotit1(s1,dist_unfold.horn,ymax=1)
 # plotit1(s1,dist_unfold.horn,ymax=0.5)
 
 
-
 # testing experiment 2 ----------------------------------------------------
-
 
 
 add_dist2 <- function(sampdata,method,sample0="TY.1_D0_NT",phy=phy2) {
@@ -1099,7 +1097,6 @@ g1.asv
 
 
 
-
 phy2 <- phy.tyler %>% filter(experiment==2) %>%
   mutate(baseline=sample=="TY.1_D0_NT")
 otu2base <- phy2 %>% 
@@ -1132,6 +1129,8 @@ g2.asv <- ggplot() +
   scale_y_continuous(trans=log_epsilon_trans(0.001)) +
   facet_nested(treatment~time)
 g2.asv
+
+
 
 
 # compare unique asvs -----------------------------------------------------
@@ -1268,5 +1267,30 @@ pdf("plots/compare.tree.1B.pdf",width=20,height=50)
 compare.uniques2("1A","1B")
 dev.off()
 shell.exec("plots/compare.tree.1B.pdf")
+
+
+# examine blastn and trace ------------------------------------------------
+
+baseline <- "1A"
+phy.blast <- phy.tyler %>%
+  filter(experiment==1)
+in.baseline <- get_taxa(phy.blast,baseline)>0
+tax <- phy.blast %>%
+  get.tax() %>% 
+  mutate(in.baseline=in.baseline)
+blast1 <- tax.blast.tyler %>% 
+  inner_join(select(tax,otu,in.baseline),by="otu") %>%
+  group_by(otu) %>%
+  arrange(evalue.rank)
+
+blast1 %>% select(otu,in.baseline,Phylum,Family,Species,evalue.rank,evalue,pident) %>% dt()
+
+
+
+
+
+
+
+
 
 
