@@ -158,11 +158,12 @@ g.pca
 
 # phylo tree --------------------------------------------------------------
 
+
 selected.samples <- c("1A","TY.12_D9_UV","TY.9_D9_AC")
 
 phy.tree <- phy.species %>%
   filter(sample %in% selected.samples)
-
+s.tree <- phy.tree %>%
 # phylo tree
 tr <- phy_tree(phy.tree)
 # ggtree object
@@ -176,13 +177,13 @@ gd <- gt$data %>%
          hjust=ifelse(is.between(angle,90,270),1,0),
          angle=ifelse(is.between(angle,90,270),angle+180,angle))
 
-
 ydict <- gd %>% select(otu,y)
 xlim <- max(gd$x)*c(1.3,1.5)
 xdict <- tibble(sample=selected.samples) %>% 
-  left_join(s,by="sample") %>%
+  left_join(s.tree,by="sample") %>%
   mutate(xring=1:n(),
          x=scales::rescale(xring,to=xlim))
+
 
 otu.subset <- phy.tree %>%
   get.otu.melt(filter.zero=FALSE) %>%
@@ -889,6 +890,7 @@ testit1 <- function(sampdata,var) {
            time=findp(model,"time"))
   return(tbl)
 }
+
 plotit1 <- function(sampdata,var,eps=0,ymax=NULL) {
   if (!is.null(ymax)) {
     ymax <- expand_limits(y=ymax)
@@ -924,7 +926,6 @@ s1 <- phy1 %>%
          time.rank=dense_rank(days),
          temp.num=celsius,
          temp.rank=dense_rank(temp.num))
-
 
 testit1(s1,InvSimpson) # no diff
 testit1(s1,qpcr.totalseqs) # time
