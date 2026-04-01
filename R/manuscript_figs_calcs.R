@@ -566,7 +566,7 @@ test2(dist_pct.bray) # *time*, *autoclave* and *uv.dna*
 
 
 
-# exp1 tree diffs? --------------------------------------------------------
+# exp1 tree  --------------------------------------------------------
 
 samples.compare <- c("1A","1B","1C","1L","1Z")
 phy1.tree <- phy1 %>% 
@@ -574,6 +574,7 @@ phy1.tree <- phy1 %>%
 gg <- phy.prepare.ggtree(phy1.tree,sortby=lbl,
                          xmin.tip = 0.6,
                          radius.range = c(1.05, 1.4))
+
 
 gg$ggtree +
   geom_tile(data=gg$otu,aes(x=x,y=y,fill=otu,alpha=pctseqs),color="gray") +
@@ -585,6 +586,60 @@ gg$ggtree +
   scale_alpha_continuous(trans=log_epsilon_trans()) +
   scale_fill_taxonomy(data=gg$otu,fill=otu)
 
+
+
+# exp1 tree diffs ---------------------------------------------------------
+
+library(glue)
+samples.compare <- c("1A","1B","1C","1L","1Z")
+phy1.tree <- phy1 %>%
+  # phy.collapse() %>%
+  mutate(compare=lbl %in% samples.compare) %>%
+  filter(compare|baseline)
+
+otu1base <- phy1.tree %>%
+  filter(baseline,prune_unused_taxa=FALSE) %>%
+  get.otu.melt(filter.zero=FALSE) %>%
+  transmute(otu,pctseqs0=pctseqs)
+
+gg <- phy1.tree %>%
+  filter(compare,prune_unused_taxa=FALSE) %>%
+  phy.prepare.ggtree(sortby=lbl,
+                     xmin.tip = 0.6,
+                     radius.range = c(1.05, 1.4))
+gg$otu <- gg$otu %>%
+  left_join(otu1base,by="otu") %>%
+  mutate(in.baseline=pctseqs0>0,
+         pct.diff=pctseqs-pctseqs0,
+         pct.ratio=pctseqs/pctseqs0)
+
+
+# pct.diff
+gg$ggtree +
+  geom_tile(data=gg$otu,aes(x=x,y=y,fill=pct.diff,color=in.baseline),size=0.5) +
+  geom_segment(data=gg$tax,aes(x=x,xend=gg$x.ring.min,y=y,yend=y),color="gray",linetype="dotted") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_color_manual(values=c("TRUE"="pink","FALSE"=NA)) +
+  geom_text(data=gg$tax,aes(x=gg$x.ring.max,y=y,label=Species,hjust=hjust,angle=angle),
+            color="dark gray",size=2) +
+  scale_fill_gradient2(transform=log_epsilon_trans(0.001),limits=c(-1,1))
+
+
+
+# pct.ratio
+gg$ggtree +
+  geom_tile(data=gg$otu,aes(x=x,y=y,fill=pct.ratio,color=in.baseline),size=0.5) +
+  geom_segment(data=gg$tax,aes(x=x,xend=gg$x.ring.min,y=y,yend=y),color="gray",linetype="dotted") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_color_manual(values=c("TRUE"="pink","FALSE"=NA)) +
+  geom_text(data=gg$tax,aes(x=gg$x.ring.max,y=y,label=Species,hjust=hjust,angle=angle),
+            color="dark gray",size=2) +
+  scale_fill_gradient2(transform="log")
+
+
+
+
+# exp1 tree diffs ---------------------------------------------------------
 
 
 library(glue)
@@ -653,17 +708,6 @@ gg.tyler.tree.data <- gg.tyler.tree +
   geom_text(data=xdict,aes(x=x,y=max(gd$y)/4,label=samplabel),size=3)
 
 gg.tyler.tree.data
-
-
-
-
-
-
-
-
-
-
-
 
 
 
