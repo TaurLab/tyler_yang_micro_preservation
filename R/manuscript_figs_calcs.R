@@ -104,6 +104,7 @@ phy2 <- phy.tyler %>%
          time.rank=dense_rank(time.num),
          uv=fct_relevel(uv,"no UV"),
          heat=fct_relevel(heat,"no heat"),
+         heat.75C=heat=="75C",
          heat.autoclave=heat=="autoclave",
          uv.dna=uv=="UV DNA",
          # qpcr.totalseqs=coalesce(qpcr.totalseqs,100),
@@ -115,6 +116,8 @@ phy2 <- phy.tyler %>%
   add_dist("horn") %>%
   add_dist("mean.horn") %>%
   add_dist("unfold.horn")
+
+
 
 
 # fig 1A: experiment 1 stackplot -------------------------------------------------------------------
@@ -258,84 +261,6 @@ asdf4("PCoA","horn") +
 
 
 
-# testing exp 1 ----------------------------------------------------------
-
-s1 <- phy1 %>% get.samp(stats=TRUE)
-testit1 <- function(sampdata,var) {
-  var <- ensym(var)
-  findp <- function(models,text) {
-    models %>% map_lgl(~{
-      pvals <- .x %>% filter(term %ilike% text) %>% pull(p.value)
-      if (length(pvals)==0) {
-        NA
-      } else {
-        any(pvals<=0.05)
-      }
-    })
-  }
-  tests <- rlang::inject(
-    list(
-      !!var ~ time,
-      !!var ~ time.num,
-      !!var ~ time.rank,
-      !!var ~ temp,
-      !!var ~ temp.num,
-      !!var ~ temp.rank,
-      !!var ~ time+temp,
-      !!var ~ time.num+temp.num,
-      !!var ~ time.rank+temp.rank
-    )
-  )
-  tbl <- tibble(formula=tests) %>%
-    mutate(test=map_chr(formula,deparse1),
-           model=map(formula,~{
-             broom::tidy(lm(.x,data=sampdata))
-           }),
-           temp=findp(model,"temp"),
-           time=findp(model,"time"))
-  return(tbl)
-}
-
-test1 <- function(yvar,timevar=time,tempvar=temp,sampdata=s1) {
-  yvar <- ensym(yvar)
-  timevar <- ensym(timevar)
-  tempvar <- ensym(tempvar)
-  findp <- function(tbl,text) {
-    pvals <- tbl %>% filter(term %ilike% text) %>% pull(p.value) 
-    if (length(pvals)==0) {
-      return(NA)
-    } else {
-      return(any(pvals<=0.05))
-    }
-  }
-  formula <- rlang::inject(!!yvar ~ !!timevar + !!tempvar)
-  model <- lm(formula,data=sampdata)
-  regtable <- broom::tidy(model)
-  tbl <- tibble(test=as_label(formula),
-                model=list(model),
-                table=list(regtable),
-                temp=findp(regtable,"temp"),
-                time=findp(regtable,"time"))
-  tbl
-}
-
-
-testall1 <- function(yvar,sampdata=s1) {
-  yvar <- ensym(yvar)
-  bind_rows(test1(!!yvar,time,temp),
-            test1(!!yvar,time.num,temp.num),
-            test1(!!yvar,time.rank,temp.rank))
-}
-
-test1(InvSimpson) # no diff
-test1(qpcr.totalseqs) # *time*
-test1(dist_horn) # *time*
-test1(dist_pct.bray) # *time*
-
-# testall1(InvSimpson) # no diff
-# testall1(qpcr.totalseqs) # time
-# testall1(dist_horn) # time
-# testall1(dist_pct.bray) # time and temp
 
 # fig 1c: step compare exp1 ------------------------------------------------------------
 
@@ -508,59 +433,6 @@ g2.asv <- ggplot() +
         axis.title = element_blank(), panel.background = element_blank())
 
 g2.asv
-
-
-
-# testing exp 2 -----------------------------------------------------------
-
-
-s2 <- phy2 %>% get.samp(stats=TRUE)
-test2 <- function(yvar,timevar=time,uvvar=uv,heatvar=heat,sampdata=s2) {
-  yvar <- ensym(yvar)
-  timevar <- ensym(timevar)
-  uvvar <- ensym(uvvar)
-  heatvar <- ensym(heatvar)
-  findp <- function(tbl,text) {
-    pvals <- tbl %>% filter(term %ilike% text) %>% pull(p.value) 
-    if (length(pvals)==0) {
-      return(NA)
-    } else {
-      return(any(pvals<=0.05))
-    }
-  }
-  formula <- rlang::inject(!!yvar ~ !!timevar + !!uvvar + !!heatvar)
-  model <- lm(formula,data=sampdata)
-  regtable <- broom::tidy(model)
-  tbl <- tibble(test=as_label(formula),
-                model=list(model),
-                table=list(regtable),
-                time=findp(regtable,"time"),
-                heat.75c=findp(regtable,"heat75C"),
-                heat.autoclave=findp(regtable,"autoclave"),
-                uv.regular=findp(regtable,"uvUV$"),
-                uv.dna=findp(regtable,"dna"))
-  tbl
-}
-
-testall2 <- function(yvar,sampdata=s2) {
-  yvar <- ensym(yvar)
-  bind_rows(test2(!!yvar,time,uv,heat),
-            test2(!!yvar,time.rank,uv,heat),
-            test2(!!yvar,time,uv,heat.autoclave),
-            test2(!!yvar,time.rank,uv,heat.autoclave))
-}
-
-test2(InvSimpson) # no diff
-test2(qpcr.totalseqs) # *autoclave* and *uv.dna*
-test2(dist_horn) # *autoclave* and *uv.dna*
-test2(dist_pct.bray) # *time*, *autoclave* and *uv.dna*
-
-
-# test all versions
-# testall2(InvSimpson) # no diff
-# testall2(qpcr.totalseqs) # time and temp
-# testall2(dist_horn) # no diff
-# testall2(dist_pct.bray) # time and temp
 
 
 
@@ -792,12 +664,168 @@ gg.tyler.tree.data2
 
 
 
+# testing exp 1 ----------------------------------------------------------
+
+s1 <- phy1 %>% get.samp(stats=TRUE)
+testit1 <- function(sampdata,var) {
+  var <- ensym(var)
+  findp <- function(models,text) {
+    models %>% map_lgl(~{
+      pvals <- .x %>% filter(term %ilike% text) %>% pull(p.value)
+      if (length(pvals)==0) {
+        NA
+      } else {
+        any(pvals<=0.05)
+      }
+    })
+  }
+  tests <- rlang::inject(
+    list(
+      !!var ~ time,
+      !!var ~ time.num,
+      !!var ~ time.rank,
+      !!var ~ temp,
+      !!var ~ temp.num,
+      !!var ~ temp.rank,
+      !!var ~ time+temp,
+      !!var ~ time.num+temp.num,
+      !!var ~ time.rank+temp.rank
+    )
+  )
+  tbl <- tibble(formula=tests) %>%
+    mutate(test=map_chr(formula,deparse1),
+           model=map(formula,~{
+             broom::tidy(lm(.x,data=sampdata))
+           }),
+           temp=findp(model,"temp"),
+           time=findp(model,"time"))
+  return(tbl)
+}
+
+test1 <- function(yvar,timevar=time,tempvar=temp,sampdata=s1) {
+  yvar <- ensym(yvar)
+  timevar <- ensym(timevar)
+  tempvar <- ensym(tempvar)
+  findp <- function(tbl,text) {
+    pvals <- tbl %>% filter(term %ilike% text) %>% pull(p.value) 
+    if (length(pvals)==0) {
+      return(NA)
+    } else {
+      return(any(pvals<=0.05))
+    }
+  }
+  formula <- rlang::inject(!!yvar ~ !!timevar + !!tempvar)
+  model <- lm(formula,data=sampdata)
+  regtable <- broom::tidy(model)
+  tbl <- tibble(test=as_label(formula),
+                model=list(model),
+                table=list(regtable),
+                temp=findp(regtable,"temp"),
+                time=findp(regtable,"time"))
+  tbl
+}
+
+
+testall1 <- function(yvar,sampdata=s1) {
+  yvar <- ensym(yvar)
+  bind_rows(test1(!!yvar,time,temp),
+            test1(!!yvar,time.num,temp.num),
+            test1(!!yvar,time.rank,temp.rank))
+}
+
+test1(InvSimpson) # no diff
+test1(qpcr.totalseqs) # *time*
+test1(dist_horn) # *time*
+test1(dist_pct.bray) # *time*
+
+testall1(InvSimpson) # no diff
+testall1(qpcr.totalseqs) # time
+testall1(dist_horn) # time
+testall1(dist_pct.bray) # time and temp
+
+
+# testing exp 2 -----------------------------------------------------------
+
+
+s2 <- phy2 %>% get.samp(stats=TRUE)
+test2 <- function(yvar,timevar=time,uvvar=uv,heatvar=heat,sampdata=s2) {
+  yvar <- ensym(yvar)
+  timevar <- ensym(timevar)
+  uvvar <- ensym(uvvar)
+  heatvar <- ensym(heatvar)
+  findp <- function(tbl,text) {
+    pvals <- tbl %>% filter(term %ilike% text) %>% pull(p.value) 
+    if (length(pvals)==0) {
+      return(NA)
+    } else {
+      return(any(pvals<=0.05))
+    }
+  }
+  formula <- rlang::inject(!!yvar ~ !!timevar + !!uvvar + !!heatvar)
+  model <- lm(formula,data=sampdata)
+  regtable <- broom::tidy(model)
+  tbl <- tibble(test=as_label(formula),
+                model=list(model),
+                table=list(regtable),
+                time=findp(regtable,"time"),
+                heat.75c=findp(regtable,"heat75C"),
+                heat.autoclave=findp(regtable,"autoclave"),
+                uv.regular=findp(regtable,"uvUV$"),
+                uv.dna=findp(regtable,"dna"))
+  tbl
+}
+
+testall2 <- function(yvar,sampdata=s2) {
+  yvar <- ensym(yvar)
+  bind_rows(test2(!!yvar,time,uv,heat),
+            test2(!!yvar,time.rank,uv,heat),
+            test2(!!yvar,time,uv,heat.autoclave),
+            test2(!!yvar,time.rank,uv,heat.autoclave))
+}
+
+test2(InvSimpson) # no diff
+test2(qpcr.totalseqs) # *autoclave* and *uv.dna*
+test2(dist_horn) # *autoclave* and *uv.dna*
+test2(dist_pct.bray) # *time*, *autoclave* and *uv.dna*
+
+# test all versions
+testall2(InvSimpson) # no diff
+testall2(qpcr.totalseqs) # time and temp
+testall2(dist_horn) # no diff
+testall2(dist_pct.bray) # time and temp
+
+
+
+
+
 
 # permanova ---------------------------------------------------------------
 
 library(vegan)
 
-dist <- calc.distance(phy1,"horn")
-s <- get.samp(phy1)
-adonis2(dist ~ temp + time, data=s)
+# dist1 <- calc.distance(phy1,"pct.bray")
+# s1 <- get.samp(phy1)
+# adonis2(dist1 ~ temp + time, data=s1)
+
+dist1 <- calc.distance(phy1,"horn")
+s1 <- get.samp(phy1)
+adonis2(dist1 ~ temp + time, data=s1)
+
+adonis2(dist1 ~ temp + time + time*temp, data=s1)
+
+
+
+dist2 <- calc.distance(phy2,"horn")
+# dist2 <- calc.distance(phy2,"bray")
+s2 <- get.samp(phy2)
+
+adonis2(dist2 ~ time + uv + heat, data=s2)
+adonis2(dist2 ~ time + uv + heat.autoclave, data=s2)
+adonis2(dist2 ~ time + uv + heat.75C + heat.autoclave, data=s2)
+
+
+
+
+
+
 
