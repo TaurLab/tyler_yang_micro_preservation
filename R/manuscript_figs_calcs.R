@@ -789,3 +789,15 @@ gg.tyler.tree.data2
 
 
 
+
+
+
+
+# permanova ---------------------------------------------------------------
+
+library(vegan)
+
+dist <- calc.distance(phy1,"horn")
+s <- get.samp(phy1)
+adonis2(dist ~ temp + time, data=s)
+
