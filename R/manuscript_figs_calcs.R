@@ -12,17 +12,25 @@ load("data/phy.tyler.RData")
 load("data/phy.tyler.additional.RData")
 phy.others = read_rds("data/other.samps.rds")
 
-# add beta metric, using samp.comparator
+# correct negative phylo tree lengths
+tr <- phy_tree(phy.tyler)
+tr$edge.length[tr$edge.length<0] <- 0
+phy_tree(phy.tyler) <- tr
+rm(tr)
 
+# add beta metric, using samp.comparator
 
 # remove additional ranks
 phy.tyler <- phy.tyler %>% 
   select(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species)
+
 # modify sample_data
 s.tyler <- phy.tyler %>% get.samp() %>%
   left_join(trace_tbl.tyler,by="sample") %>%
-  mutate(temp=ifelse(sample %in% c("1A","1B"),"-80C",temp),
+  mutate(temp0=ifelse(sample %in% c("1A","1B"),"n/a",temp),
+         temp=ifelse(sample %in% c("1A","1B"),"-80C",temp),
          temp=factor(temp,levels=c("-80C", "-20C", "4C", "room temp")),
+         
          days=as.numeric(str_replace(time,"day ","")),
          time=fct_reorder(time,days),
          time=fct_relabel(time,~str_replace(.x,"day","Day")),
@@ -39,7 +47,14 @@ s.tyler <- phy.tyler %>% get.samp() %>%
   # make a new sample label
   mutate(ord=order(order(experiment,temp,treatment,time,letter)),
          lbl=paste0(experiment,LETTERS[ord]),
-         lbl.comparator=lbl[match(sample.comparator,sample)]) %>%
+         lbl.comparator=lbl[match(sample.comparator,sample)],
+         temp.abbrev=case_match(temp,"room temp"~"RT",.default=temp),
+         treatment.abbrev=str_replace(treatment,"autoclave","auto"),
+         time.abbrev=paste0("d",days),
+         lbl2=str_glue("{lbl} ({treatment.abbrev}|{time.abbrev},{temp.abbrev})"),
+         lbl3=ifelse(experiment==1,
+                     str_glue("{lbl} ({time.abbrev},{temp.abbrev})"),
+                     str_glue("{lbl} ({treatment.abbrev}|{time.abbrev})"))) %>%
   ungroup() 
 sample_data(phy.tyler) <- s.tyler %>% set.samp()
 
@@ -47,7 +62,7 @@ sample_data(phy.tyler) <- s.tyler %>% set.samp()
 pal <- list("Bacteroidota (phylum)"=Phylum %in% c("Bacteroidetes", "Bacteroidota") ~ shades("#51AB9B", variation = 0.25),
             "Lachnospiraceae (family)"=Family == "Lachnospiraceae" ~ shades("#EC9B96", variation = 0.25),
             "Oscillospiraceae (family)"=Family %in% c("Ruminococcaceae", "Oscillospiraceae") ~ shades("#9AAE73", variation = 0.25),
-            "Eubacteriales (order)"=Order %in% c("Clostridiales", "Eubacteriales") ~ shades("#9C854E", variation = 0.25),
+            "Other Eubacteriales (order)"=Order %in% c("Clostridiales", "Eubacteriales") ~ shades("#9C854E", variation = 0.25),
             "Actinomycetota (phylum)"=Phylum %in% c("Actinobacteria", "Actinomycetota") ~ shades("#A77097", variation = 0.25),
             # "Enterococcus (genus)"=Genus == "Enterococcus" ~ shades("#129246", variation = 0.15),
             # "Streptococcus (genus)"=Genus == "Streptococcus" ~ shades("#9FB846", variation = 0.15),
@@ -56,27 +71,29 @@ pal <- list("Bacteroidota (phylum)"=Phylum %in% c("Bacteroidetes", "Bacteroidota
             "Pseudomonadota (phylum)"=Phylum %in% c("Proteobacteria", "Pseudomonadota") ~ shades("red", variation = 0.4),
             "Other Bacteria"=TRUE ~ shades("gray", variation = 0.25))
 
-
-add_dist <- function(phy,method) {
+add_dist <- function(phy,method,comparator=NULL,varname=NULL) {
   # phy=phy1;method="horn";sample0="1A"
-  varname <- paste0("dist_",method)
+  varname <- enquo(varname)
+  if (rlang::quo_is_null(varname)) {
+    varname <- paste0("dist_",method)  
+  } else {
+    varname <- as_label(varname)
+  }
   s <- get.samp(phy)
-  samp1 <- s$sample.comparator
   samp2 <- s$sample
-  comp <- unique(samp1)
+  if (is.null(comparator)) {
+    samp1 <- s$sample.comparator  
+  } else {
+    samp1 <- rep_along(samp2,comparator)
+  }
   pw <- calc.pairwise(sample1=samp1,sample2=samp2,method=method,phy=phy)
   new.s <- s %>% mutate(!!varname:=pw)
   sample_data(phy) <- new.s %>% set.samp()
-  # if (length(comp)!=1) {
-  #   cli::cli_abort("YTError: should be one sample comparator!")
-  # }
-  cli::cli_alert("added var: {.pkg {varname}} (comparator={comp})")
+  cli::cli_alert("added var: {.pkg {varname}} (comparator={unique(samp1)})")
   return(phy)
 }
 
-
 # generate phy1 and phy2 -----------------------------------------------------------
-
 
 phy1 <- phy.tyler %>% 
   filter(experiment==1) %>%
@@ -91,7 +108,10 @@ phy1 <- phy.tyler %>%
                      timelabel=ifelse(time=="Day 0","","Storage Time"),
                      templabel="Storage Temperature",
                      time=fct_recode(time,"Day 0 (Baseline)"="Day 0"),
-                     letter.rev=fct_rev(letter)) %>%
+                     letter.rev=fct_rev(letter),
+                     lbl=fct_reordern(lbl,lbl),
+                     lbl2=fct_reordern(lbl2,lbl),
+                     lbl3=fct_reordern(lbl3,lbl)) %>%
   add_dist("pct.bray") %>%
   add_dist("horn") %>%
   add_dist("mean.horn") %>%
@@ -110,7 +130,7 @@ phy2 <- phy.tyler %>%
          # qpcr.totalseqs=coalesce(qpcr.totalseqs,100),
          # for formatting purposes
          timelabel="Storage Time",
-         treatmentlabel="Pre-treatment",
+         treatmentlabel="Treatment",
          letter=factor(1)) %>%
   add_dist("pct.bray") %>%
   add_dist("horn") %>%
@@ -118,12 +138,9 @@ phy2 <- phy.tyler %>%
   add_dist("unfold.horn")
 
 
-
-
 # fig 1A: experiment 1 stackplot -------------------------------------------------------------------
 
 otu1 <- phy1 %>% 
-  # phy.collapse() %>% 
   get.otu.melt()
 s1 <- phy1 %>% get.samp(stats=TRUE)
 
@@ -154,16 +171,64 @@ g1a <- ggplot() +
   coord_flip()
 g1a
 
-
-
 # with beta diversity on top
 littlewidth <- 0.1
 g1a.alt <- g1a +
-  geom_col(data=s1,aes(x=stage(letter.rev,after_stat=x+(width+littlewidth)/2),y=dist_horn),width=littlewidth,fill="blue") +
-  geom_text(data=s1,aes(x=stage(letter.rev,after_stat=x+(width+littlewidth)/2),y=dist_horn,
-                        label=str_glue("Horn={sprintf('%.3f',dist_horn)}")),hjust=0,size=3)
+  geom_col(data=s1,aes(x=stage(letter.rev,after_stat=x+(width+littlewidth)/2),y=s1$dist_mean.horn),
+           width=littlewidth,fill="blue") +
+  geom_text(data=s1,aes(x=stage(letter.rev,after_stat=x+(width+littlewidth)/2),y=s1$dist_mean.horn,
+                        label=str_glue("mean-Horn={sprintf('%.3f',s1$dist_mean.horn)}")
+                        # label=str_glue("Horn={sprintf('%.3f',dist_horn)}\nUnfold-Horn={sprintf('%.3f',dist_unfold.horn)}")
+                        # label=str_glue("Unfold-Horn={sprintf('%.3f',dist_unfold.horn)}")
+                        ),hjust=0,size=3)
 g1a.alt
 
+pdf("plots/fig1a - exp1 stackplot.pdf",width=10,height=8)
+g1a.alt
+dev.off()
+
+shell.exec("plots/fig1a - exp1 stackplot.pdf")
+
+
+
+# fig 1 alt ---------------------------------------------------------------
+
+otu1 <- phy1 %>% 
+  get.otu.melt()
+s1 <- phy1 %>% get.samp(stats=TRUE) %>%
+  mutate(x=as.numeric(lbl3))
+temp.groups <- s1 %>% group_by(temp0) %>%
+  summarize(xmin=min(x)-0.4,xmax=max(x)+0.4,
+            .groups="drop")
+
+temp.shades <- geom_rect(data=temp.groups,aes(xmin=xmin,xmax=xmax,ymin=-Inf,ymax=Inf),alpha=0.1)
+
+brackets <- function(y1,y2) {
+  list(
+    geom_bracket(data=s1,aes(x=x-0.4,xend=x+0.4,y=y1,label=temp0),tip="bare"),
+    geom_bracket(data=s1,aes(x=x-0.35,xend=x+0.35,y=y2,group=paste(temp0,time),label=time.abbrev),tip="bare")
+  )
+}
+
+
+g1.horn <- ggplot(s1) +
+  expand_limits(y=0.5) +
+  geom_col(aes(x=lbl3,y=dist_horn)) +
+  temp.shades + 
+  brackets(0.3,0.22)
+g1.unfold.horn <- ggplot(s1) +
+  expand_limits(y=0.4) +
+  geom_col(aes(x=lbl3,y=dist_unfold.horn)) +
+  temp.shades + 
+  brackets(0.3,0.22)
+
+g1.tax <- ggplot(otu1) +
+  geom_taxonomy(aes(x=lbl3,y=pctseqs,fill=otu,label=Species)) +
+  scale_y_continuous(expand=FALSE) +
+  scale_fill_taxonomy(name="Bacterial Taxa",data=otu1,tax.palette=pal,fill=otu) +
+  theme(axis.text.x=element_text(angle=90,vjust=0.5))
+
+gg.stack2(g1.unfold.horn,g1.tax,heights=c(1,3))
 
 
 # fig 1B: PCOA exp 1 ------------------------------------------------------------
@@ -306,26 +371,32 @@ g1.asv <- ggplot() +
         axis.text = element_blank(), axis.ticks = element_blank(), 
         axis.title = element_blank(), panel.background = element_blank())
 
+
 g1.asv
+
+pdf("plots/fig1c - exp1 step compare.pdf",width=10,height=5)
+g1.asv
+dev.off()
+
+shell.exec("plots/fig1c - exp1 step compare.pdf")
+
 
 # fig 2A: experiment 2 stackplot ------------------------------------------
 
-
 otu2 <- phy2 %>% 
   # for speed
-  # phy.collapse() %>%
+  phy.collapse.bins() %>%
   get.otu.melt() %>%
   group_by(treatment,time) %>%
   mutate(sample.number=as.numeric(factor(sample))) %>%
   ungroup() 
-s2 <- phy2 %>% get.samp() %>%
+s2 <- phy2 %>% get.samp(stats=TRUE) %>%
   mutate(qpcr.label=ifelse(is.na(qpcr.totalseqs),"undetectable",short_number(qpcr.totalseqs)))
-
 
 width <- 0.75
 g2a <- ggplot() +
-  # geom_taxonomy(data=otu2,aes(x=letter,y=pctseqs,fill=otu,label=Species),width=width) +
-  geom_taxonomy(data=otu2,aes(x=letter,y=pctseqs,fill=otu),width=width) +
+  geom_taxonomy(data=otu2,aes(x=letter,y=pctseqs,fill=otu,label=Species),width=width) +
+  # geom_taxonomy(data=otu2,aes(x=letter,y=pctseqs,fill=otu),width=width) +
   geom_col(data=filter(s2,baseline),aes(x=letter,y=1),
            width=width,linewidth=0.75,linetype="longdash",color="blue",fill=NA) +
   geom_text(data=s2,aes(x=letter,y=0,label=lbl),hjust=1) +
@@ -354,12 +425,20 @@ xtop <- (width+littlewidth)/2
 g2a.alt <- g2a +
   geom_col(data=s2,aes(x=stage(letter,after_stat=x+xtop),y=dist_horn),width=littlewidth,fill="steelblue") +
   geom_text(data=s2,aes(x=stage(letter,after_stat=x+xtop),y=dist_horn,
-                        label=str_glue("Horn={sprintf('%.3f',dist_horn)}")),hjust="inward",size=3) +
-  geom_text(data=s2,aes(x=stage(letter,after_stat=x-xtop),y=0,
-                        label=str_glue("qPCR={qpcr.label}")),hjust="inward",size=3)
+                        label=str_glue("Horn={sprintf('%.3f',dist_horn)}")),hjust="inward",size=3)
+  # geom_text(data=s2,aes(x=stage(letter,after_stat=x-xtop),y=0,
+  #                       label=str_glue("qPCR={qpcr.label}")),hjust="inward",size=3) +
+  # geom_text(data=s2,aes(x=stage(letter,after_stat=x-xtop),y=1,
+  #                       label=str_glue("ntaxa={Observed}")),hjust="inward",size=3)
+
 g2a.alt
 
 
+pdf("plots/fig2a - exp2 stackplot.pdf",width=10,height=8)
+g2a.alt
+dev.off()
+
+shell.exec("plots/fig2a - exp2 stackplot.pdf")
 # fig 2B: PCOA exp 2 ------------------------------------------------------------
 
 
@@ -437,16 +516,15 @@ g2.asv
 
 
 
-
 # exp1 tree  --------------------------------------------------------
 
 samples.compare <- c("1A","1B","1C","1L","1Z")
 phy1.tree <- phy1 %>% 
-  filter(lbl %in% samples.compare)
+  filter(lbl %in% samples.compare) 
+
 gg <- phy.prepare.ggtree(phy1.tree,sortby=lbl,
                          xmin.tip = 0.6,
                          radius.range = c(1.05, 1.4))
-
 
 gg$ggtree +
   geom_tile(data=gg$otu,aes(x=x,y=y,fill=otu,alpha=pctseqs),color="gray") +
@@ -458,22 +536,20 @@ gg$ggtree +
   scale_alpha_continuous(trans=log_epsilon_trans()) +
   scale_fill_taxonomy(data=gg$otu,fill=otu)
 
+# exp1 tree diffs (circular) ---------------------------------------------------------
 
-
-# exp1 tree diffs ---------------------------------------------------------
-
-library(glue)
 samples.compare <- c("1A","1B","1C","1L","1Z")
+
 phy1.tree <- phy1 %>%
-  # phy.collapse() %>%
   mutate(compare=lbl %in% samples.compare) %>%
-  filter(compare|baseline)
+  filter(compare|baseline) %>%
+  summarize_tax_table(in.baseline=any(baseline & numseqs>0),
+                      baseline.pct=pctseqs[baseline])
 
 otu1base <- phy1.tree %>%
   filter(baseline,prune_unused_taxa=FALSE) %>%
   get.otu.melt(filter.zero=FALSE) %>%
   transmute(otu,pctseqs0=pctseqs)
-
 gg <- phy1.tree %>%
   filter(compare,prune_unused_taxa=FALSE) %>%
   phy.prepare.ggtree(sortby=lbl,
@@ -481,37 +557,319 @@ gg <- phy1.tree %>%
                      radius.range = c(1.05, 1.4))
 gg$otu <- gg$otu %>%
   left_join(otu1base,by="otu") %>%
-  mutate(in.baseline=pctseqs0>0,
-         pct.diff=pctseqs-pctseqs0,
-         pct.ratio=pctseqs/pctseqs0)
+  mutate(pct.diff=pctseqs-pctseqs0,
+         pct.ratio=pctseqs/pctseqs0,
+         log.pct.ratio=log(pct.ratio))
 
-
-# pct.diff
-gg$ggtree +
-  geom_tile(data=gg$otu,aes(x=x,y=y,fill=pct.diff,color=in.baseline),size=0.5) +
-  geom_segment(data=gg$tax,aes(x=x,xend=gg$x.ring.min,y=y,yend=y),color="gray",linetype="dotted") +
+gt.base <- gg$ggtree +
+  geom_segment(data=gg$tax,aes(x=x,xend=gg$x.ring.min,y=y,yend=y,
+                               color=in.baseline,
+                               linetype=in.baseline)) +
+  geom_point(data=gg$tax,aes(x=x,y=y,color=in.baseline,
+                             size=as.numeric(baseline.pct)),alpha=0.6) +
+  geom_text(data=gg$tax,aes(x=gg$x.ring.max,y=y,label=Species,hjust=hjust,angle=angle,
+                            color=in.baseline),size=2) +
   geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
-  scale_color_manual(values=c("TRUE"="pink","FALSE"=NA)) +
-  geom_text(data=gg$tax,aes(x=gg$x.ring.max,y=y,label=Species,hjust=hjust,angle=angle),
-            color="dark gray",size=2) +
+  # taxa names
+  scale_size_continuous(transform=log_epsilon_trans(0.01)) +
+  scale_color_manual(values=c("TRUE"="pink","FALSE"="dark gray")) +
+  scale_linetype_manual(values=c("TRUE"="solid","FALSE"="dotted"))
+
+# regular plot
+g1.tree <- gt.base + 
+  geom_tile(data=filter(gg$otu,numseqs>0),
+            aes(x=x,y=y,fill=otu,alpha=pctseqs),color="gray") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_alpha_continuous(trans=log_epsilon_trans()) +
+  scale_fill_taxonomy(data=gg$otu,fill=otu)
+g1.tree
+# pct.diff
+g1.tree.diff <- gt.base + 
+  geom_tile(data=filter(gg$otu,numseqs>0),
+            aes(x=x,y=y,fill=pct.diff),color="gray") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
   scale_fill_gradient2(transform=log_epsilon_trans(0.001),limits=c(-1,1))
-
-
+g1.tree.diff
 
 # pct.ratio
-gg$ggtree +
-  geom_tile(data=gg$otu,aes(x=x,y=y,fill=pct.ratio,color=in.baseline),size=0.5) +
-  geom_segment(data=gg$tax,aes(x=x,xend=gg$x.ring.min,y=y,yend=y),color="gray",linetype="dotted") +
+g1.tree.ratio <- gt.base + 
+  geom_tile(data=filter(gg$otu,!is.nan(log.pct.ratio)),
+            aes(x=x,y=y,fill=log.pct.ratio),color="gray",size=0.5) +
   geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
-  scale_color_manual(values=c("TRUE"="pink","FALSE"=NA)) +
-  geom_text(data=gg$tax,aes(x=gg$x.ring.max,y=y,label=Species,hjust=hjust,angle=angle),
-            color="dark gray",size=2) +
-  scale_fill_gradient2(transform="log")
+  scale_fill_gradient2(limits=c(-5,5))
+g1.tree.ratio
+
+pdf("plots/g1.tree.pdf",width=20,height=20)
+g1.tree
+g1.tree.diff
+g1.tree.ratio
+dev.off()
+
+shell.exec("plots/g1.tree.pdf")
+
+# exp1 tree diffs (rectangular) ---------------------------------------------------------
+
+samples.compare <- c("1A","1B","1C","1L","1Z")
+
+phy1.tree <- phy1 %>%
+  mutate(compare=lbl %in% samples.compare) %>%
+  filter(compare|baseline) %>%
+  summarize_tax_table(in.baseline=any(baseline & numseqs>0),
+                      baseline.pct=pctseqs[baseline])
+
+otu1base <- phy1.tree %>%
+  filter(baseline,prune_unused_taxa=FALSE) %>%
+  get.otu.melt(filter.zero=FALSE) %>%
+  transmute(otu,pctseqs0=pctseqs)
+gg <- phy1.tree %>%
+  filter(compare,prune_unused_taxa=FALSE) %>%
+  phy.prepare.ggtree(layout="rectangular",
+                     sortby=lbl,
+                     xmin.tip = 0,
+                     radius.range = c(1.05, 1.4))
+gg$otu <- gg$otu %>%
+  left_join(otu1base,by="otu") %>%
+  mutate(pct.diff=pctseqs-pctseqs0,
+         pct.ratio=pctseqs/pctseqs0,
+         log.pct.ratio=log(pct.ratio))
 
 
 
 
-# exp1 tree diffs ---------------------------------------------------------
+gt.base <- gg$ggtree +
+  expand_limits(x=1) +
+  geom_segment(data=gg$tax,aes(x=x,xend=gg$x.ring.min,y=y,yend=y,
+                               color=in.baseline,
+                               linetype=in.baseline)) +
+  geom_point(data=gg$tax,aes(x=x,y=y,color=in.baseline,
+                             size=as.numeric(baseline.pct)),alpha=0.6) +
+  geom_text(data=gg$tax,aes(x=gg$x.ring.max,y=y,label=Species,hjust=hjust,angle=angle,
+                            color=in.baseline),size=2) +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  # taxa names
+  scale_size_continuous(transform=log_epsilon_trans(0.01)) +
+  scale_color_manual(values=c("TRUE"="pink","FALSE"="dark gray")) +
+  scale_linetype_manual(values=c("TRUE"="solid","FALSE"="dotted"))
+
+# regular plot
+g1.tree <- gt.base + 
+  geom_tile(data=filter(gg$otu,numseqs>0),
+            aes(x=x,y=y,fill=otu,alpha=pctseqs),color="gray") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_alpha_continuous(trans=log_epsilon_trans()) +
+  scale_fill_taxonomy(data=gg$otu,fill=otu)
+g1.tree
+# pct.diff
+g1.tree.diff <- gt.base + 
+  geom_tile(data=filter(gg$otu,numseqs>0),
+            aes(x=x,y=y,fill=pct.diff),color="gray") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_fill_gradient2(transform=log_epsilon_trans(0.001),limits=c(-1,1))
+g1.tree.diff
+
+# pct.ratio
+g1.tree.ratio <- gt.base + 
+  geom_tile(data=filter(gg$otu,!is.nan(log.pct.ratio)),
+            aes(x=x,y=y,fill=log.pct.ratio),color="gray",size=0.5) +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_fill_gradient2(limits=c(-5,5))
+g1.tree.ratio
+
+
+pdf("plots/g1.tree.rect.pdf",width=10,height=20)
+g1.tree
+g1.tree.diff
+g1.tree.ratio
+dev.off()
+
+shell.exec("plots/g1.tree.rect.pdf")
+
+# exp 2 tree diffs -------------------------------------------------------------
+
+samples.compare <- c("2A","2H","2L","2N","2S","2U")
+# samples.compare <- c("2A","2H","2L","2N","2S")
+phy2.tree <- phy2 %>%
+  mutate(compare=lbl %in% samples.compare) %>%
+  filter(compare|baseline) %>%
+  summarize_tax_table(in.baseline=any(baseline & numseqs>0),
+                      baseline.pct=pctseqs[baseline])
+
+otu2base <- phy2.tree %>%
+  filter(baseline,prune_unused_taxa=FALSE) %>%
+  get.otu.melt(filter.zero=FALSE) %>%
+  transmute(otu,pctseqs0=pctseqs)
+gg <- phy2.tree %>%
+  filter(compare,prune_unused_taxa=FALSE) %>%
+  phy.prepare.ggtree(sortby=lbl,
+                     xmin.tip = 0.6,
+                     radius.range = c(1.05, 1.4))
+gg$otu <- gg$otu %>%
+  left_join(otu2base,by="otu") %>%
+  mutate(pct.diff=pctseqs-pctseqs0,
+         pct.ratio=pctseqs/pctseqs0,
+         log.pct.ratio=log(pct.ratio))
+
+gt.base <- gg$ggtree +
+  geom_segment(data=gg$tax,aes(x=x,xend=gg$x.ring.min,y=y,yend=y,
+                               color=in.baseline,
+                               linetype=in.baseline)) +
+  geom_point(data=gg$tax,aes(x=x,y=y,color=in.baseline,
+                             size=as.numeric(baseline.pct)),alpha=0.6) +
+  # taxa names
+  geom_text(data=gg$tax,aes(x=gg$x.ring.max,y=y,label=Species,hjust=hjust,angle=angle,
+                            color=in.baseline),size=2) +
+  scale_size_continuous(transform=log_epsilon_trans(0.01)) +
+  scale_color_manual(values=c("TRUE"="pink","FALSE"="dark gray")) +
+  scale_linetype_manual(values=c("TRUE"="solid","FALSE"="dotted"))
+
+# regular plot
+g2.tree <- gt.base + 
+  geom_tile(data=filter(gg$otu,numseqs>0),
+            aes(x=x,y=y,fill=otu,alpha=pctseqs),color="gray") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_alpha_continuous(trans=log_epsilon_trans()) +
+  scale_fill_taxonomy(data=gg$otu,fill=otu)
+g2.tree
+# pct.diff
+g2.tree.diff <- gt.base + 
+  geom_tile(data=filter(gg$otu,numseqs>0),
+            aes(x=x,y=y,fill=pct.diff),color="gray") +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_fill_gradient2(transform=log_epsilon_trans(0.001),limits=c(-1,1))
+g2.tree.diff
+# pct.ratio
+g2.tree.ratio <- gt.base + 
+  geom_tile(data=filter(gg$otu,!is.nan(log.pct.ratio)),
+            aes(x=x,y=y,fill=log.pct.ratio),color="gray",size=0.5) +
+  geom_text(data=gg$samp,aes(x=x,y=gg$angle_to_y(90),label=lbl)) +
+  scale_fill_gradient2(limits=c(-5,5))
+g2.tree.ratio
+
+
+
+
+# errant microbes ---------------------------------------------------------
+
+phy.pcrneg.control <- read_rds("data/phy.pcrneg.control.rds") %>%
+  select_tax_table(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species) %>%
+  mutate_sample_data(sample=str_replace(sample,"..pool1161",""),
+                     lbl="PCRNeg",lbl2="PCRNeg",lbl3="PCRNeg",
+                     treatment="PCRNeg")
+phy2a <- phy.combine(phy2,phy.pcrneg.control) %>%
+  mutate(lbl=fct_reordern(lbl,lbl),
+         lbl2=fct_reordern(lbl2,lbl),
+         lbl3=fct_reordern(lbl3,lbl))
+# extract taxids from tax.blast.tyler and add to phy2a
+tax.taxid <- tax.blast.tyler %>%
+  group_by(otu) %>%
+  arrange(evalue.rank,staxid) %>%
+  slice(1) %>%
+  ungroup() %>%
+  transmute(otu,taxid=as.character(staxid))
+tax.2a <- phy2a %>%
+  get.tax() %>% 
+  left_join(tax.taxid,by="otu")
+tax_table(phy2a) <- tax.2a %>% set.tax()
+
+base <- phy2a %>% filter(sample=="TY.1_D0_NT") %>%
+  get.otu.melt(sample_data=FALSE) %>% select(otu,taxid)
+ctrl <- phy2a %>% filter(lbl=="PCRNeg") %>%
+  get.otu.melt(sample_data=FALSE) %>% select(otu,taxid)
+otu2a <- get.otu.melt(phy2a) %>%
+  mutate(taxid.in.base=taxid %in% base$taxid,
+         taxid.in.ctrl=taxid %in% ctrl$taxid,
+         taxid.status=case_when(
+           taxid.in.base & taxid.in.ctrl ~ "both",
+           taxid.in.base & !taxid.in.ctrl ~ "in 2A",
+           !taxid.in.base & taxid.in.ctrl ~ "in PCRNeg",
+           TRUE ~ "neither"),
+         # otu.in.base=otu %in% base$otu,
+         # otu.in.ctrl=otu %in% ctrl$otu,
+         # otu.status=case_when(
+         #   otu.in.base & otu.in.ctrl ~ "both",
+         #   otu.in.base & !otu.in.ctrl ~ "in 2A",
+         #   !otu.in.base & otu.in.ctrl ~ "in PCRNeg",
+         #   TRUE ~ "neither"),
+         Species=str_replace_all(Species,"\\[|\\]",""))
+samp2a <- otu2a %>%
+  # group_by(sample,lbl,lbl2,lbl3,treatment) %>%
+  group_by(!!!syms(sample_variables(phy2a))) %>%
+  summarize(pct.taxid.base=mean(taxid.in.base),
+            pct.taxid.ctrl=mean(taxid.in.ctrl),
+            # pct.otu.base=mean(otu.in.base),pct.otu.ctrl=mean(otu.in.ctrl),
+            # pctseq.taxid.base=sum(numseqs[taxid.in.base])/sum(numseqs),pctseq.taxid.ctrl=sum(numseqs[taxid.in.ctrl])/sum(numseqs),
+            # pctseq.otu.base=sum(numseqs[otu.in.base])/sum(numseqs),pctseq.otu.ctrl=sum(numseqs[otu.in.ctrl])/sum(numseqs),
+            .groups="drop") %>%
+  mutate(x=as.numeric(lbl3),
+         xmin=x-0.475,xmax=x+0.475,
+         qpcr.lbl=case_when(
+           lbl3=="PCRNeg" ~ "(n/a)",
+           is.na(qpcr.totalseqs) ~ "(undetectable)",
+           TRUE ~ NA_character_
+         ))
+
+
+samp2a.long <- samp2a %>% pivot_longer(cols=c(pct.taxid.base,pct.taxid.ctrl)) %>%
+  mutate(name=case_match(name,"pct.taxid.base"~"2A","pct.taxid.ctrl"~"PCRNeg"))
+
+treat.groups <- samp2a.long %>% 
+  group_by(treatment) %>%
+  summarize(xmin=min(xmin),xmax=max(xmax),
+            .groups="drop") %>%
+  mutate(b.xmin=xmin+0.05,b.xmax=xmax-0.05,
+         b.xmin2=b.xmin+0.05,b.xmax2=b.xmax-0.05)
+
+group.shading <- geom_rect(data=treat.groups,aes(xmin=b.xmin,xmax=b.xmax,ymin=-Inf,ymax=Inf),alpha=0.1)
+group.brackets <- function(y) {
+  geom_bracket(data=treat.groups,
+               aes(x=b.xmin2,xend=b.xmax2,y=y,label=treatment),
+               fontsize=3,tip="bare")
+}
+
+eps <- 1000
+g.qpcr <- ggplot(samp2a) + 
+  geom_col(aes(x=lbl3,y=qpcr.totalseqs)) + 
+  geom_text(aes(x=lbl3,y=0,label=qpcr.lbl),hjust=0,angle=90) +
+  group.shading + 
+  group.brackets(-eps) +
+  scale_y_continuous("Total abundance by 16S qPCR",trans=log_epsilon_trans(eps),
+                     labels=pretty_power10)
+
+
+g.asv.compare <- ggplot(samp2a.long) +
+  geom_point(aes(x=lbl3,y=value,color=name,group=name)) + 
+  geom_line(aes(x=lbl3,y=value,color=name,group=name)) +
+  group.shading + 
+  
+  group.brackets(-0.1) +
+  # # dashed boxes
+  geom_rect(data=filter(samp2a,lbl %in% c("2A","PCRNeg")),
+            aes(xmin=xmin,xmax=xmax,ymin=0,ymax=1,color=lbl),
+            linetype="longdash",linewidth=0.75,fill=NA,show.legend = FALSE) +
+  scale_color_manual("Compared sample",values=c("PCRNeg"="blue","2A"="red")) +
+  scale_y_continuous("Percent ASV with similarity\nto compared sample",label=scales::label_percent()) +
+  theme(axis.text.x=element_text(angle=90))
+
+
+g.tax.compare <- ggplot(otu2a) +
+  geom_taxonomy(aes(x=lbl3,y=pctseqs,label=Species,fill=otu),tax.palette=pal,label.split=TRUE,fontsize=3) +
+  # dashed boxes
+  geom_rect(data=filter(samp2a,lbl %in% c("2A","PCRNeg")),
+            aes(xmin=xmin,xmax=xmax,ymin=0,ymax=1,color=lbl),
+            linetype="longdash",linewidth=0.75,fill=NA,show.legend = FALSE) +
+  group.shading +
+  scale_color_manual("",values=c("PCRNeg"="blue","2A"="red")) +
+  scale_x_discrete("Sample") +
+  scale_y_continuous("Bacterial Composition\nRelative abundance",expand=FALSE) +
+  scale_fill_taxonomy(name="Bacterial taxa",data=otu2a,fill=otu,tax.palette=pal) +
+  theme(axis.text.x=element_text(hjust=0,vjust=0.5,angle=90),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank())
+
+gg.stack2(g.qpcr,g.asv.compare,g.tax.compare)
+
+
+# exp1 tree diffs (old)---------------------------------------------------------
 
 
 library(glue)
@@ -586,7 +944,7 @@ gg.tyler.tree.data
 
 
 
-# exp2 tree diffs? --------------------------------------------------------
+# exp2 tree diffs? (old)--------------------------------------------------------
 
 
 # g2a.alt
@@ -807,11 +1165,22 @@ library(vegan)
 # s1 <- get.samp(phy1)
 # adonis2(dist1 ~ temp + time, data=s1)
 
+
 dist1 <- calc.distance(phy1,"horn")
 s1 <- get.samp(phy1)
-adonis2(dist1 ~ temp + time, data=s1)
+# time signif
 
-adonis2(dist1 ~ temp + time + time*temp, data=s1)
+phy11 <- phy1 %>% mutate(temp=ifelse(sample %in% c("1A","1B"),"n/a",temp))
+dist11 <- calc.distance(phy11,"horn")
+s11 <- get.samp(phy11)
+
+# time signif
+adonis2(dist1 ~ temp + time, data=s1)
+adonis2(dist11 ~ temp + time, data=s11)
+
+# time NS, temp NS
+adonis2(dist1 ~ days + days:temp, data=s1)
+adonis2(dist11 ~ days + days:temp, data=s11)
 
 
 
@@ -822,6 +1191,7 @@ s2 <- get.samp(phy2)
 adonis2(dist2 ~ time + uv + heat, data=s2)
 adonis2(dist2 ~ time + uv + heat.autoclave, data=s2)
 adonis2(dist2 ~ time + uv + heat.75C + heat.autoclave, data=s2)
+
 
 
 
