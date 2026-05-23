@@ -53,6 +53,12 @@ save(tax.blast.tyler,trace_tbl.tyler,file="data/phy.tyler.additional.RData")
 
 
 
+load("data-raw/dada2_full_pipeline.RData",envir=full <- new.env())
+phy.pcrneg.control <- full$phy.dada2 %>% 
+  filter(sample=="PCRNeg4..pool1161")
+saveRDS(phy.pcrneg.control,file="data/phy.pcrneg.control.rds")
+
+
 # trace -------------------------------------------------------------------
 
 
