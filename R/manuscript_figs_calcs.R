@@ -62,7 +62,8 @@ s.tyler <- phy.tyler %>% get.samp() %>%
          lbl2=str_glue("{lbl} ({treatment.abbrev}|{time.abbrev},{temp.abbrev})"),
          lbl3=ifelse(experiment==1,
                      str_glue("{lbl} ({time.abbrev},{temp.abbrev})"),
-                     str_glue("{lbl} ({treatment.abbrev}|{time.abbrev})"))) %>%
+                     str_glue("{lbl} ({treatment.abbrev}|{time.abbrev})")),
+         log.qpcr.totalseqs=log(qpcr.totalseqs)) %>%
   ungroup() 
 sample_data(phy.tyler) <- s.tyler %>% set.samp()
 
@@ -166,35 +167,57 @@ tax.2a <- phy2a %>% get.tax() %>% left_join(tax.taxid,by="otu")
 tax_table(phy2a) <- tax.2a %>% set.tax()
 
 
-# fig 1a and 1b: experiment 1 stackplot ---------------------------------------------------------------
-
-phy1a <- phy1 %>%
-  mutate(x=as.numeric(lbl),
-         baseline=lbl=="1A",
-         dist=dist_mean.horn,
-         top_label="Storage Temperature / Time")
-otu1 <- phy1a %>% get.otu.melt()
-s1a <- phy1a %>% get.samp(stats=TRUE)
 
 
+# universal plotting elements ---------------------------------------------
 
-panel.spacing.x <- s1a %>% distinct(temp,time) %>%
+# exp1 nested facets
+exp1.facet <- facet_nested(. ~ temp.lbl+time.lbl,space="free_x",scales="free_x",
+                           nest_line=element_line(),
+                           resect=unit(3,"pt"),
+                           solo_line=TRUE,
+                           labeller=label_parsed)
+# exp1 tweaked spacing between facets
+exp1.panel.spacing.x <- get.samp(phy1) %>% distinct(temp,time) %>%
   arrange(temp,time) %>% 
   group_by(temp) %>%
   transmute(x=ifelse(row_number()==n(),3.5,1.5)) %>%
   ungroup() %>% slice(-n()) %>% pull(x) %>% unit("points")
-facet <- facet_nested(. ~ temp.lbl+time.lbl,space="free_x",scales="free_x",
-                      nest_line=element_line(),
-                      resect=unit(3,"pt"),
-                      solo_line=TRUE,
-                      labeller=label_parsed)
+width <- 0.95
+# fig 1: exp1 taxplot and fig 1b: experiment 1 stackplot ---------------------------------------------------------------
+
+otu1 <- phy1 %>% get.otu.melt()
+s1 <- phy1 %>% get.samp()
+
+g1.tax <- ggplot(otu1) +
+  geom_taxonomy(aes(x=lbl,y=pctseqs,fill=otu,label=Species),width=width,label.split=TRUE) +
+  geom_col(data=filter(s1,lbl=="1A"),aes(x=lbl,y=1,color="baseline sample (1A)"),
+           linewidth=1,linetype="longdash",fill=NA,width=width) +
+  scale_y_continuous("Relative abundance",
+                     expand=FALSE,labels=scales::label_percent()) +
+  scale_color_manual(name="Sample Comparison",values=c("baseline sample (1A)"="red")) +
+  scale_fill_taxonomy(name="Bacterial Taxa",data=otu1,tax.palette=pal,fill=otu) +
+  xlab("Sample") +
+  exp1.facet +
+  theme(legend.key.size = unit(0.85,"lines"),
+        panel.spacing.x = exp1.panel.spacing.x)
+g1.tax
+
+
+# fig 2: distance ---------------------------------------------------------
+
+phy1a <- phy1 %>%
+  mutate(x=as.numeric(lbl),
+         baseline=lbl=="1A",
+         dist=dist_mean.horn)
+# otu1 <- phy1a %>% get.otu.melt()
+s1a <- phy1a %>% get.samp(stats=TRUE)
 dtext <- s1a %>% filter(sample=="1A") %>%
   mutate(label="baseline\nsample",
          x=1.5,y=0.02,
          xend=1,yend=0.003)
 dtext.layer <- list(geom_text(data=dtext,aes(x=x,y=y,label=label),vjust=-0.02,lineheight=0.8),
                     geom_segment(data=dtext,aes(x=x,y=y,xend=xend,yend=yend)))
-width <- 0.95
 
 g1.dist <- ggplot(s1a) +
   geom_col(aes(x=lbl,y=dist),fill="steelblue",width=width) +
@@ -204,92 +227,99 @@ g1.dist <- ggplot(s1a) +
   scale_y_continuous(name="Distance\n(compared with baseline)")  +
   scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
   xlab("Sample") +
-  facet +
-  theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1),
-        panel.spacing.x = panel.spacing.x)
+  exp1.facet +
+  theme(panel.spacing.x = exp1.panel.spacing.x)
 
-
-# annotate("text",label="asdf",x=1,y=0.05,group="Day 0")
-
-g1.tax <- ggplot(otu1) +
-  geom_taxonomy(aes(x=lbl,y=pctseqs,fill=otu,label=Species),width=width,label.split=TRUE) +
-  geom_col(data=filter(s1a,lbl=="1A"),aes(x=lbl,y=1,color="baseline sample (1A)"),
-           linewidth=1,linetype="longdash",fill=NA,width=width) +
-  scale_y_continuous("Relative abundance",
-                     expand=FALSE,labels=scales::label_percent()) +
-  scale_color_manual(name="Sample Comparison",values=c("baseline sample (1A)"="red")) +
-  scale_fill_taxonomy(name="Bacterial Taxa",data=otu1,tax.palette=pal,fill=otu) +
-  xlab("Sample") +
-  facet +
-  theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1),
-        legend.key.size = unit(0.85,"lines"),
-        panel.spacing.x = panel.spacing.x)
-
-g1.tax
 g1.dist
 
-# g.fig1a <- gg.stack2(g1.dist,g1.tax,heights=c(2,3))
-# 
-# g1.tax
-# g1.dist
-# g.fig1a
-# 
-# pdf("plots/fig1a - exp1 stackplot.pdf",width=12,height=8)
-# g.fig1a
-# dev.off()
-# shell.exec("plots/fig1a - exp1 stackplot.pdf")
-# 
-# g.fig1a %>% copy.to.clipboard.gg(width=12,height=8)
+# fig s1: invsimpson and shannon, plot and testing ------------------------------------------------------------
+
+s1 <- phy1 %>% get.samp(stats=TRUE)
+
+# testing
+imod <- aov(InvSimpson ~ time * temp, data = s1)
+itbl <- broom::tidy(imod)
+itbl
+smod <- aov(Shannon ~ time * temp, data = s1)
+stbl <- broom::tidy(smod)
+stbl
+
+itext <- itbl %>% 
+  filter(term!="Residuals") %>% 
+  mutate(p.value=scales::pvalue(p.value),
+         term=str_replace(term,":"," %*% "),
+         pterm=str_glue("{term} P: {p.value}")) %>%
+  pull(pterm) %>% paste(collapse="; ") %>%
+  paste("ANOVA: ",.) %>%
+  paste0("'",.,"'") %>%
+  str_replace_all(fixed("%*%"),"'%*%'")
+
+stext <- stbl %>% 
+  filter(term!="Residuals") %>% 
+  mutate(p.value=scales::pvalue(p.value),
+         term=str_replace(term,":"," %*% "),
+         pterm=str_glue("{term} P: {p.value}")) %>%
+  pull(pterm) %>% paste(collapse="; ") %>%
+  paste("ANOVA: ",.) %>%
+  paste0("'",.,"'") %>%
+  str_replace_all(fixed("%*%"),"'%*%'")
 
 
-# get.dist <- function(method,phy=phy1a) {
-#   phy <- phy %>% add_dist(method,varname=dist)
-#   s <- get.samp(phy)
-#   ggplot(s) +
-#     geom_col(aes(x=lbl3,y=dist),fill="steelblue",width=width) +
-#     geom_text(aes(x=lbl3,y=dist,label=pretty_number(dist),color=baseline),
-#               vjust=0,size=3,show.legend = FALSE) +
-#     scale_y_continuous(name=str_glue("{str_to_title(method)} Distance\n(compared with baseline)"))  +
-#     scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
-#     facet +
-#     theme(panel.spacing.x = panel.spacing.x)
-# }
-# g1.horn <- get.dist("horn")
-# g1.mean.horn <- get.dist("mean.horn")
-# g1.unfold.horn <- get.dist("unfold.horn")
-# g1.pct.bray <- get.dist("pct.bray")
-# gg.stack2(g1.dist,
-#           g1.horn,
-#           g1.unfold.horn,
-#           g1.mean.horn,
-#           g1.pct.bray,
-#           g1.tax,heights=c(2,2,2,2,2,3))
+g.invsimpson <- ggplot(s1,aes(x=lbl,y=InvSimpson)) +
+  geom_col(fill="steelblue") +
+  exp1.facet + 
+  theme(panel.spacing.x = exp1.panel.spacing.x) +
+  ggplot2::labs(title="Inverse Simpson index",
+                x="Sample", 
+                y="Inverse Simpson index",
+                caption=parse(text=itext))
 
-# g1.invsimpson <- ggplot(s1a) +
-#   geom_col(aes(x=lbl3,y=InvSimpson),fill="steelblue",width=width) +
-#   geom_text(aes(x=lbl3,y=InvSimpson,label=pretty_number(InvSimpson,digits=3),color=baseline),
-#             vjust=0,size=3,show.legend = FALSE) +
-#   scale_y_continuous(name="Inverse Simpson")  +
-#   scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
-#   facet +
-#   theme(panel.spacing.x = panel.spacing.x)
-# 
-# g1.qpcr <- ggplot(s1a) +
-#   geom_col(aes(x=lbl3,y=qpcr.totalseqs),fill="steelblue",width=width) +
-#   geom_text(aes(x=lbl3,y=qpcr.totalseqs,label=short_number(qpcr.totalseqs),color=baseline),
-#             vjust=0,size=3,show.legend = FALSE) +
-#   scale_y_continuous(name="Total 16S qPCR",
-#                      trans=log_epsilon_trans(10000),labels=pretty_power10)  +
-#   scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
-#   facet +
-#   theme(panel.spacing.x = panel.spacing.x)
-# g1.invsimpson
-# g1.qpcr
+g.shannon <- ggplot(s1,aes(x=lbl,y=Shannon)) +
+  expand_limits(y=5.5) +
+  geom_col(fill="purple") +
+  exp1.facet + 
+  theme(panel.spacing.x = exp1.panel.spacing.x) +
+  ggplot2::labs(title="Shannon index",
+                x="Sample", 
+                y="Shannon index",
+                caption=parse(text=stext))
+
+g.alpha.diversity <- g.invsimpson / g.shannon
+g.alpha.diversity
 
 
 
+# Fig s2, QPCR --------------------------------------------------------------------
 
-# fig 1b: exp 1, pcoa and permanova ---------------------------------------------------------------
+s1b <- get.samp(phy1,stats=TRUE)
+qmod <- aov(log.qpcr.totalseqs ~ time * temp, data = s1b)
+qtbl <- broom::tidy(qmod)
+qtext <- qtbl %>% 
+  filter(term!="Residuals") %>% 
+  mutate(p.value=scales::pvalue(p.value),
+         term=str_replace(term,":"," %*% "),
+         pterm=str_glue("{term} P: {p.value}")) %>%
+  pull(pterm) %>% paste(collapse="; ") %>%
+  paste("ANOVA: ",.) %>%
+  paste0("'",.,"'") %>%
+  str_replace_all(fixed("%*%"),"'%*%'")
+
+g1.qpcr <- ggplot(s1b,aes(x=lbl,y=qpcr.totalseqs)) +
+  expand_limits(y=1e10) +
+  geom_col(fill="steelblue") +
+  exp1.facet + 
+  theme(panel.spacing.x = exp1.panel.spacing.x) +
+  scale_y_continuous(trans=log_epsilon_trans(1e5),labels=pretty_power10) +
+  ggplot2::labs(x="Sample", 
+                y="16S qPCR",
+                caption=parse(text=qtext))
+g1.qpcr
+
+
+
+
+
+# fig 2: exp 1, pcoa and permanova ---------------------------------------------------------------
 
 phy1b <- phy1 %>%
   mutate(storage=days!=0,
@@ -318,7 +348,7 @@ pairwise <- pairwise.adonis2(dist1 ~ time, data=s1b) %>%
 
 # generate pcoa plot with permanova results
 ord1 <- phy.ordinate(phy1b,method="PCoA",distance=dist1)
-g.fig1b.pcoa <- ggplot(arrange(ord1$data,lbl),aes(x=axis1,y=axis2,shape=temp)) +
+g.fig2.pcoa <- ggplot(arrange(ord1$data,lbl),aes(x=axis1,y=axis2,shape=temp)) +
   geom_point(aes(fill=time,color=time),size=4) + 
   # geom_text_repel(size=3,show.legend = FALSE) +
   # geom_text_repel(aes(label=lbl),size=3,vjust=1.4) +
@@ -351,19 +381,20 @@ gtbl2 <- ggtexttable(ptbl2,rows=NULL,theme=tt)
 
 pos1 <- c(0.75,0.35)
 pos2 <- c(0.75,0.15)
-g.fig1b <- g.fig1b.pcoa + 
+g.fig2 <- g.fig2.pcoa + 
   patchwork::inset_element(gtbl1,pos1[1],pos1[2],pos1[1],pos1[2]) +
   patchwork::inset_element(gtbl2,pos2[1],pos2[2],pos2[1],pos2[2])
-g.fig1b
+g.fig2
 
 pdf("plots/fig1b - exp1 pcoa.pdf",width=8,height=8)
-g.fig1b
+g.fig3
 dev.off()
 shell.exec("plots/fig1b - exp1 pcoa.pdf")
 
-# fig 1c: step compare exp1 ------------------------------------------------------------
+# fig 4: step compare exp1 ------------------------------------------------------------
 
-samples.compare <- c("1B","1E","1Q","1Z")
+
+samples.compare <- c("1B","1E","1H","1S","1Q","1Z")
 phy1.compare <- phy1 %>% 
   mutate(compare=lbl %in% samples.compare,
          lbl.compare=str_glue("{lbl3} (vs. {lbl.comparator})")) %>%
@@ -386,9 +417,7 @@ otu1compare <- phy1.compare %>%
 s1compare <- phy1.compare %>% 
   filter(compare,prune_unused_taxa=FALSE) %>% 
   get.samp(stats=TRUE) %>%
-  # mutate(label=str_glue("InvSimpson={pretty_number(InvSimpson,digits=3)}\nHorn={sprintf('%.3f',dist_horn)}"))
-  mutate(label=str_glue("InvSimpson={pretty_number(InvSimpson,digits=3)}\nmean Horn={sprintf('%.3f',dist_mean.horn)}"))
-
+  mutate(label=str_glue("Horn={sprintf('%.3f',dist_horn)}"))
 
 g1.asv <- ggplot() +
   geom_col(data=otu1compare,aes(x=col,y=pctseqs,fill=otu)) +
@@ -402,7 +431,7 @@ g1.asv <- ggplot() +
                    fontsize=3,label="unique\nASVs"),tip="square") + 
   scale_fill_taxonomy(name="Bacterial Taxa",data=otu1compare,fill=otu,tax.palette=pal) +
   scale_y_continuous("Relative Abundance",trans=log_epsilon_trans(0.001)) +
-  facet_wrap(~lbl.compare,nrow=1) +
+  facet_wrap(~lbl.compare,nrow=2) +
   theme(aspect.ratio=1,
         legend.key.size = unit(0.85,"lines"),
         axis.text = element_blank(), axis.ticks = element_blank(), 
@@ -897,7 +926,9 @@ gg.tyler.tree.data2
 
 
 
-# testing exp 1 ----------------------------------------------------------
+
+
+# testing exp 1 (old) ----------------------------------------------------------
 
 s1 <- phy1 %>% get.samp(stats=TRUE)
 testit1 <- function(sampdata,var) {
@@ -975,7 +1006,7 @@ testall1(InvSimpson) # no diff
 testall1(qpcr.totalseqs) # time
 testall1(dist_horn) # time
 testall1(dist_pct.bray) # time and temp
-# testing exp 1 (new) ----------------------------------------------------------
+# testing exp 1 (old2) ----------------------------------------------------------
 
 s1 <- phy1 %>% get.samp(stats=TRUE)
 testit1 <- function(sampdata,var) {
@@ -1013,6 +1044,7 @@ testit1 <- function(sampdata,var) {
   return(tbl)
 }
 
+
 model <- lm(InvSimpson ~ time + temp,data=s1)
 tbl <- broom::tidy(model)
 tbl
@@ -1040,15 +1072,12 @@ test1 <- function(yvar,timevar=time,tempvar=temp,sampdata=s1) {
                 time=findp(regtable,"time"))
   tbl
 }
-
-
 testall1 <- function(yvar,sampdata=s1) {
   yvar <- ensym(yvar)
   bind_rows(test1(!!yvar,time,temp),
             test1(!!yvar,time.num,temp.num),
             test1(!!yvar,time.rank,temp.rank))
 }
-
 test1(InvSimpson) # no diff
 test1(qpcr.totalseqs) # *time*
 test1(dist_horn) # *time*
