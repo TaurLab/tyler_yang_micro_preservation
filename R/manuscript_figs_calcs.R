@@ -1,5 +1,5 @@
 
-# set up data -------------------------------------------------------------
+# set up data (run) -------------------------------------------------------------
 
 library(yingtools2)
 library(tidyverse)
@@ -11,6 +11,7 @@ library(pairwiseAdonis)
 library(ggpubr)
 library(ggrepel)
 library(decontam)
+library(emmeans) # for contrasts
 rm(list=ls())
 
 load("data/phy.tyler.RData")
@@ -29,8 +30,6 @@ rm(tr)
 phy.tyler <- phy.tyler %>% 
   select(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species)
 
-
-
 # modify sample_data
 s.tyler <- phy.tyler %>% get.samp() %>%
   left_join(trace_tbl.tyler,by="sample") %>%
@@ -40,9 +39,20 @@ s.tyler <- phy.tyler %>% get.samp() %>%
          time=fct_reorder(time,days),
          time=fct_relabel(time,~str_replace(.x,"day","Day")),
          treatment=factor(treatment,levels=c("none", "75C", "UV", "75C+UV", "autoclave", "autoclave+UV", "UV DNA")),
-         temp.lbl=fct_recode(temp,"italic('(n/a)')"="n/a","-80*degree*C"="-80C","-20*degree*C"="-20C",
-                             "4*degree*C"="4C","'room temp'"="room temp"),
-         time.lbl=fct_relabel(time,function(x) paste0("'",x,"'")),
+         # time.lbl=fct_relabel(time,function(x) paste0("'",x,"'")),
+         # temp.lbl=fct_recode(temp,"italic('(n/a)')"="n/a",
+         #                     "-80*degree*C"="-80C",
+         #                     "-20*degree*C"="-20C",
+         #                     "4*degree*C"="4C",
+         #                     "'room temp'"="room temp"),
+         # treatment.lbl=fct_recode(treatment,
+         #                          "italic(none)"="none", 
+         #                          "75*degree*C"="75C", 
+         #                          "'UV'"="UV", 
+         #                          "75*degree*C+UV"="75C+UV", 
+         #                          "'autoclave'"="autoclave", 
+         #                          "'autoclave'+'UV'"="autoclave+UV", 
+         #                          "'UV DNA'"="UV DNA"),
          sample_number=order(order(treatment,temp,time)),
          letter=str_extract(sample,"(?<=^[0-9]{1,2})[AB]"),
          sample2=paste(treatment,temp,storage,time,sample_number,sep="|"),
@@ -62,8 +72,7 @@ s.tyler <- phy.tyler %>% get.samp() %>%
          lbl2=str_glue("{lbl} ({treatment.abbrev}|{time.abbrev},{temp.abbrev})"),
          lbl3=ifelse(experiment==1,
                      str_glue("{lbl} ({time.abbrev},{temp.abbrev})"),
-                     str_glue("{lbl} ({treatment.abbrev}|{time.abbrev})")),
-         log.qpcr.totalseqs=log(qpcr.totalseqs)) %>%
+                     str_glue("{lbl} ({treatment.abbrev}|{time.abbrev})"))) %>%
   ungroup() 
 sample_data(phy.tyler) <- s.tyler %>% set.samp()
 
@@ -102,7 +111,7 @@ add_dist <- function(phy,method,comparator=NULL,varname=NULL) {
   return(phy)
 }
 
-# generate phy1 and phy2 -----------------------------------------------------------
+# generate phy1 and phy2 (run) -----------------------------------------------------------
 
 phy1 <- phy.tyler %>% 
   filter(experiment==1) %>%
@@ -118,6 +127,13 @@ phy1 <- phy.tyler %>%
                      templabel="Storage Temperature",
                      # time=fct_recode(time,"Day 0 (Baseline)"="Day 0"),
                      letter.rev=fct_rev(letter),
+                     xtitle.lbl="'Storage Temperature / Storage Time'",
+                     time.lbl=fct_relabel(time,function(x) paste0("'",x,"'")),
+                     temp.lbl=fct_recode(temp,"italic('(n/a)')"="n/a",
+                                         "-80*degree*C"="-80C",
+                                         "-20*degree*C"="-20C",
+                                         "4*degree*C"="4C",
+                                         "'room temp'"="room temp"),
                      lbl=fct_reordern(lbl,lbl),
                      lbl2=fct_reordern(lbl2,lbl),
                      lbl3=fct_reordern(lbl3,lbl)) %>%
@@ -127,8 +143,7 @@ phy1 <- phy.tyler %>%
   add_dist("unfold.horn")
 
 
-
-phy2 <- phy.tyler %>%
+phy2.contam <- phy.tyler %>%
   filter(experiment==2) %>%
   mutate(baseline=sample==sample.comparator,
          time.num=days,
@@ -143,48 +158,281 @@ phy2 <- phy.tyler %>%
          # for formatting purposes
          timelabel="Storage Time",
          treatmentlabel="Treatment",
-         letter=factor(1))
+         letter=factor(1),
+         xtitle.lbl="'Sample Treatment / Storage Time'",
+         time.lbl=fct_relabel(time,function(x) paste0("'",x,"'")),
+         treatment.lbl=fct_recode(treatment,
+                                  "italic(none)"="none",
+                                  "75*degree*C"="75C",
+                                  "'UV'"="UV",
+                                  "75*degree*C+UV"="75C+UV",
+                                  "'autoclave'"="autoclave",
+                                  "'autoclave'+'UV'"="autoclave+UV",
+                                  "'UV DNA'"="UV DNA"))
 
 phy.pcrneg.control <- read_rds("data/phy.pcrneg.control.rds") %>%
   select_tax_table(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species) %>%
   mutate_sample_data(sample=str_replace(sample,"..pool1161",""),
                      lbl="PCRNeg",lbl2="PCRNeg",lbl3="PCRNeg",
                      treatment="PCRNeg")
-phy2a <- phy.combine(phy2,phy.pcrneg.control) %>%
+
+phy2.with.pcrneg <- phy.combine(phy2.contam,phy.pcrneg.control) %>%
   mutate(lbl=fct_reordern(lbl,lbl),
          lbl2=fct_reordern(lbl2,lbl),
          lbl3=fct_reordern(lbl3,lbl),
+         treatment=factor(treatment,levels=c("none", "75C", "UV", "75C+UV", "autoclave", "autoclave+UV", "UV DNA", "PCRNeg")),
          is.neg.control=sample=="PCRNeg4") %>%
+  mutate_tax_table(not.contam=isNotContaminant(.,neg="is.neg.control"))
+
+# extract taxids from tax.blast.tyler and add to phy2a
+# tax.taxid <- tax.blast.tyler %>%
+#   group_by(otu) %>% arrange(evalue.rank,staxid) %>% slice(1) %>% ungroup() %>%
+#   transmute(otu,taxid=as.character(staxid))
+# tax.2a <- phy2a %>% get.tax() %>% left_join(tax.taxid,by="otu")
+# tax_table(phy2a) <- tax.2a %>% set.tax()
+
+phy2 <- phy2.with.pcrneg %>% 
+  filter(as.logical(not.contam),!is.neg.control) %>%
   add_dist("horn",comparator="TY.1_D0_NT",varname=dist_2A) %>%
   add_dist("mean.horn",comparator="TY.1_D0_NT",varname=dist_2A_meanhorn) %>%
   add_dist("horn",comparator="PCRNeg4",varname=dist_PCRNeg)
 
-# extract taxids from tax.blast.tyler and add to phy2a
-tax.taxid <- tax.blast.tyler %>%
-  group_by(otu) %>% arrange(evalue.rank,staxid) %>% slice(1) %>% ungroup() %>%
-  transmute(otu,taxid=as.character(staxid))
-tax.2a <- phy2a %>% get.tax() %>% left_join(tax.taxid,by="otu")
-tax_table(phy2a) <- tax.2a %>% set.tax()
+# universal plotting elements (run) ---------------------------------------------
 
 
-
-
-# universal plotting elements ---------------------------------------------
 
 # exp1 nested facets
-exp1.facet <- facet_nested(. ~ temp.lbl+time.lbl,space="free_x",scales="free_x",
+facetvars1 <- c("xtitle.lbl","temp.lbl","time.lbl")
+form1 <- paste(facetvars1,collapse="+") %>% paste(".~",.) %>% as.formula()
+# nested facet 1
+exp1.panel.striprect.x <- seq_along(facetvars1) %>%
+    map(~{
+      vars <- facetvars1[1:.x]
+      phy1 %>% get.samp() %>% distinct(!!!syms(vars)) %>% arrange(!!!syms(vars)) %>%
+        mutate(label=!!sym(vars[.x]),
+               level=.x)
+    }) %>% bind_rows() %>%
+    mutate(rect=map(level,~{
+      if (.x==1) {return(element_rect(fill=NA))}
+      else {return(element_rect())}
+    })) %>% pull(rect)
+exp1.facet <- facet_nested(form1, space="free_x",scales="free_x",
                            nest_line=element_line(),
+                           labeller=label_parsed,
                            resect=unit(3,"pt"),
-                           solo_line=TRUE,
-                           labeller=label_parsed)
-# exp1 tweaked spacing between facets
-exp1.panel.spacing.x <- get.samp(phy1) %>% distinct(temp,time) %>%
-  arrange(temp,time) %>% 
-  group_by(temp) %>%
-  transmute(x=ifelse(row_number()==n(),3.5,1.5)) %>%
-  ungroup() %>% slice(-n()) %>% pull(x) %>% unit("points")
+                           strip = strip_nested(background_x = exp1.panel.striprect.x),
+                           solo_line=TRUE)
+# facet spacing 1
+exp1.panel.spacing.x <- get.samp(phy1) %>% distinct(!!!syms(facetvars1)) %>% arrange(!!!syms(facetvars1)) %>%
+  mutate(spacing=case_when(temp.lbl!=lead(temp.lbl) ~ 3.5, TRUE ~ 1.5)) %>%
+  slice(-n()) %>% pull(spacing) %>% unit("points")
 width <- 0.95
-# fig 1: exp1 taxplot and fig 1b: experiment 1 stackplot ---------------------------------------------------------------
+
+facetvars2 <- c("xtitle.lbl","treatment.lbl","time.lbl")
+form2 <- paste(facetvars2,collapse="+") %>% paste(".~",.) %>% as.formula()
+exp2.panel.spacing.x <- get.samp(phy2) %>% distinct(!!!syms(facetvars2)) %>% arrange(!!!syms(facetvars2)) %>%
+  mutate(spacing=case_when(treatment.lbl!=lead(treatment.lbl) ~ 3.5, TRUE ~ 1.5)) %>%
+  slice(-n()) %>% pull(spacing) %>% unit("points")
+exp2.panel.striprect.x <- seq_along(facetvars2) %>%
+  map(~{
+    vars <- facetvars2[1:.x]
+    get.samp(phy2) %>% distinct(!!!syms(vars)) %>% arrange(!!!syms(vars)) %>%
+      mutate(label=!!sym(vars[.x]),
+             level=.x)
+  }) %>% bind_rows() %>%
+  mutate(rect=map(level,~{
+    if (.x==1) {return(element_rect(fill=NA))} 
+    else {return(element_rect())}
+  })) %>% pull(rect)
+
+exp2.facet <- facet_nested(form2,scales="free_x",space="free_x",
+                           nest_line=element_line(),
+                           labeller=label_parsed,
+                           resect=unit(3,"pt"),
+                           strip = strip_nested(background_x = exp2.panel.striprect.x),
+                           solo_line=TRUE)
+
+width <- 0.95
+
+p.value.asterisk <- function(p.value) {
+  case_when(is.na(p.value) ~ NA_character_,
+            p.value>=0.05 ~ "ns",
+            p.value>=0.01 ~ "*",
+            p.value>=0.001 ~ "**",
+            TRUE ~ "***")
+  
+}
+
+do.permanova <- function(phy,dist,form,seed=1) {
+  set.seed(seed)
+  if (is.character(dist)) {
+    .dist <- calc.distance(phy,dist)
+  } else {
+    .dist <- dist
+  }
+  s <- get.samp(phy)
+  form <- as.formula(paste(".dist",deparse(form)))
+  permanova.test <- adonis2(form, data=s, permutations=1e5)
+  permanova.tbl <- permanova.test %>% broom::tidy() %>%
+    filter(!is.na(statistic)) %>%
+    mutate(signif=p.value<0.05,
+           stars=p.value.asterisk(p.value))
+  
+  # beta dispersion test for anything significant
+  beta.test <- permanova.tbl %>%
+    filter(signif) %>%
+    pull(term) %>%
+    setNames(.,.) %>%
+    map(~{
+      if (.x %notin% names(s)) {
+        cli::cli_abort("YTError: term not found")
+      }
+      bd <- betadisper(.dist, s[[.x]])
+      permutest <- permutest(bd)
+      permutest
+    })
+  beta.tbl <- beta.test %>%
+    imap(~{
+      bd.pval <- .x[["tab"]] %>% 
+        rownames_to_column("var") %>%
+        filter(var=="Groups") %>% pull(`Pr(>F)`)
+      tibble(term=.y,betadisp.p.value=bd.pval)
+    }) %>% list_rbind()
+  # pairwise tests for anything significant and multilevel
+  pairwise.tests <- permanova.tbl %>%
+    mutate(n.lvls=map_int(term,~{
+      if (.x %in% names(s)) {
+        return(n_distinct(s[[.x]]))
+      } else {
+        return(NA_integer_)
+      }
+    })) %>% 
+    mutate(do.pairwise=signif & !is.na(n.lvls) & n.lvls>2) %>%
+    filter(do.pairwise) %>% pull(term) %>%
+    setNames(.,.) %>%
+    map(~{
+      form <- as.formula(paste0(".dist ~ ",.x))
+      pairwise <- pairwise.adonis2(form, data=s)
+      return(pairwise)
+    }) 
+  pairwise.tbl <- pairwise.tests %>%
+    imap(~{
+      .x %>% 
+        keep(is.data.frame) %>%
+        imap(~{
+          .x %>% rownames_to_column("element") %>%
+            rename(p.value=`Pr(>F)`) %>%
+            mutate(pair=.y) %>%
+            filter(!is.na(F)) %>% 
+            as_tibble()
+        }) %>% list_rbind()
+    })
+  
+  tbl <- permanova.tbl %>% 
+    left_join(beta.tbl,by="term")
+  
+  tbl.formatted <- tbl %>% 
+    mutate(across(.cols=ends_with("p.value"),.fns=~scales::pvalue(.x)),
+           term=str_replace_all(term,":","'%*%'")) %>%
+    select("Predictor"=term,"R^2"=R2,"italic(P)*'-value'"=p.value,
+           betadisp.p.value) %>%
+    mutate(across(.cols=where(is.numeric),.fns=pretty_number),
+           across(.cols=everything(),.fns=~paste0("'",.x,"'")))
+  
+  
+  ord <- phy.ordinate(phy,method="PCoA",distance=dist)
+  axes <- ord$obj$values$Rel_corr_eig %>% 
+    imap(~{
+      var <- paste0("PC",.y)
+      pct <- scales::label_percent(accuracy=0.1)(.x)
+      str_glue("{var} ({pct})")
+    })
+
+  obj <- list(
+    ord=ord,
+    ord.axes=axes,
+    tbl=tbl,
+    tbl.formatted=tbl.formatted,
+    pairwise=pairwise.tbl,
+    permanova.test=permanova.test,
+    beta.test=beta.test,
+    pairwise.tests=pairwise.tests
+  )
+  return(obj)
+}
+
+
+adjust.pairs <- function(pairwise.table,pairs=NULL) {
+  if (is.null(pairs)) {
+    pairs <- pairwise.table$pair
+  }
+  if (!all(pairs %in% pairwise.table$pair)) {
+    cli::cli_abort("YTError: not all pairs found")
+  }
+  total.pairs <- nrow(pairwise.table)
+  npairs <- length(pairs)
+  cli::cli_alert_info("Total {total.pairs} pairs, choosing {npairs}: {unname(pairs)}")
+  
+  ptbl <- pairwise.table %>% 
+    filter(pair %in% pairs) %>%
+    mutate(pair=factor(pair,levels=pairs),
+           adjusted.pval=p.adjust(p.value,"BH"))
+  
+  if (!is.null(names(pairs))) {
+    ptbl <- ptbl %>% mutate(pair=fct_recode(pair,!!!pairs))
+  }
+  ptbl <- ptbl %>%
+    arrange(pair) %>%
+    mutate(adjusted.pval=scales::pvalue(adjusted.pval)) %>%
+    select("Pair"=pair,"R^2"=R2,"italic(P)*'-value (adj)'"=adjusted.pval) %>%
+    mutate(across(.cols=where(is.numeric),.fns=pretty_number),
+           across(.cols=everything(),.fns=~paste0("'",.x,"'")))  
+  return(ptbl)
+}
+
+tt <- ttheme(base_style="light",base_size=9,
+             tbody.style = tbody_style(size=9,fill=NA,parse=TRUE),
+             colnames.style = colnames_style(size=9,fill=NA,parse=TRUE))
+
+
+
+# ********* permanova, manual *********
+# set.seed(1)
+# permanova <- adonis2(dist1 ~ temp*time, data=s1b, permutations = 100000)
+# permanova
+# # beta dispersion not signif, therefore differences are not from spread, can proceed
+# bd <- betadisper(dist1, s1b$time)
+# permutest(bd)
+# # pairwise contrasts of time
+# # pairwise0 <- pairwise.adonis(dist1,factors=s1$time, p.adjust.m="BH")
+# pairwise <- pairwise.adonis2(dist1 ~ time, data=s1b) %>%
+#   keep(is.data.frame) %>%
+#   imap(~{
+#     .x %>% rownames_to_column("element") %>%
+#       rename(p.value=`Pr(>F)`) %>%
+#       mutate(pair=.y) %>%
+#       filter(!is.na(F)) %>% as_tibble()
+#   }) %>% list_rbind()
+# pairwise
+# ptbl <- permanova %>% broom::tidy() %>%
+#   filter(!is.na(p.value)) %>%
+#   mutate(term=str_replace_all(term,":"," %*% ")) %>%
+#   select("Predictor"=term,"R^2"=R2,"italic(P)*'-value'"=p.value) %>%
+#   mutate(across(.cols=where(is.numeric),.fns=pretty_number))
+# target.pairs <- c("Day 0_vs_Day 3" = "Day 0 vs Day 3",
+#                   "Day 3_vs_Day 8" = "Day 3 vs Day 8",
+#                   "Day 11_vs_Day 8" = "Day 8 vs Day 11")
+# ptbl2 <- pairwise %>%
+#   filter(pair %in% names(target.pairs)) %>%
+#   mutate(pair=recode2(pair,target.pairs,as.factor=TRUE),
+#          adjusted.pval=p.adjust(p.value,"BH")) %>%
+#   arrange(pair) %>%
+#   select("Pair"=pair,"R^2"=R2,"italic(P)*'-value (adj)'"=adjusted.pval) %>%
+#   mutate(across(.cols=where(is.numeric),.fns=pretty_number))
+# ptbl2
+# ***************************************
+
+# fig 1: exp1 taxplot ---------------------------------------------------------------
 
 otu1 <- phy1 %>% get.otu.melt()
 s1 <- phy1 %>% get.samp()
@@ -195,47 +443,20 @@ g1.tax <- ggplot(otu1) +
            linewidth=1,linetype="longdash",fill=NA,width=width) +
   scale_y_continuous("Relative abundance",
                      expand=FALSE,labels=scales::label_percent()) +
+  scale_x_discrete(name="Sample",expand=expansion(add = 0.5)) + 
   scale_color_manual(name="Sample Comparison",values=c("baseline sample (1A)"="red")) +
   scale_fill_taxonomy(name="Bacterial Taxa",data=otu1,tax.palette=pal,fill=otu) +
   xlab("Sample") +
   exp1.facet +
   theme(legend.key.size = unit(0.85,"lines"),
+        strip.clip="on",
         panel.spacing.x = exp1.panel.spacing.x)
+
 g1.tax
-
-
-# fig 2: distance ---------------------------------------------------------
-
-phy1a <- phy1 %>%
-  mutate(x=as.numeric(lbl),
-         baseline=lbl=="1A",
-         dist=dist_mean.horn)
-# otu1 <- phy1a %>% get.otu.melt()
-s1a <- phy1a %>% get.samp(stats=TRUE)
-dtext <- s1a %>% filter(sample=="1A") %>%
-  mutate(label="baseline\nsample",
-         x=1.5,y=0.02,
-         xend=1,yend=0.003)
-dtext.layer <- list(geom_text(data=dtext,aes(x=x,y=y,label=label),vjust=-0.02,lineheight=0.8),
-                    geom_segment(data=dtext,aes(x=x,y=y,xend=xend,yend=yend)))
-
-g1.dist <- ggplot(s1a) +
-  geom_col(aes(x=lbl,y=dist),fill="steelblue",width=width) +
-  geom_text(aes(x=lbl,y=dist,label=pretty_number(dist),color=baseline),
-            vjust=0,size=3,show.legend = FALSE) +
-  dtext.layer +
-  scale_y_continuous(name="Distance\n(compared with baseline)")  +
-  scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
-  xlab("Sample") +
-  exp1.facet +
-  theme(panel.spacing.x = exp1.panel.spacing.x)
-
-g1.dist
 
 # fig s1: invsimpson and shannon, plot and testing ------------------------------------------------------------
 
 s1 <- phy1 %>% get.samp(stats=TRUE)
-
 # testing
 imod <- aov(InvSimpson ~ time * temp, data = s1)
 itbl <- broom::tidy(imod)
@@ -289,20 +510,155 @@ g.alpha.diversity
 
 
 
-# Fig s2, QPCR --------------------------------------------------------------------
 
-s1b <- get.samp(phy1,stats=TRUE)
+# fig 2: distance ---------------------------------------------------------
+
+phy1a <- phy1 %>%
+  mutate(x=as.numeric(lbl),
+         # dist=dist_mean.horn,
+         dist=dist_horn,
+         baseline=lbl=="1A")
+
+# otu1 <- phy1a %>% get.otu.melt()
+s1a <- phy1a %>% get.samp(stats=TRUE)
+dtext <- s1a %>% filter(sample=="1A") %>%
+  mutate(label="baseline\nsample",
+         x=1.5,y=0.02,
+         xend=1,yend=0.003)
+dtext.layer <- list(geom_text(data=dtext,aes(x=x,y=y,label=label),vjust=-0.02,lineheight=0.8),
+                    geom_segment(data=dtext,aes(x=x,y=y,xend=xend,yend=yend)))
+
+g1.dist <- ggplot(s1a) +
+  geom_col(aes(x=lbl,y=dist),fill="steelblue",width=width) +
+  geom_text(aes(x=lbl,y=dist,label=pretty_number(dist),color=baseline),
+            vjust=0,size=3,show.legend = FALSE) +
+  dtext.layer +
+  scale_y_continuous(name="Distance\n(compared with baseline)")  +
+  scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
+  xlab("Sample") +
+  exp1.facet +
+  theme(panel.spacing.x = exp1.panel.spacing.x)
+
+g1.dist
+
+# fig 3: exp 1, pcoa and permanova with horn ---------------------------------------------------------------
+
+phy1b <- phy1 %>%
+  mutate(storage=days!=0,
+         time=ordered(time),
+         temp=ordered(temp))
+dist1 <- calc.distance(phy1b,"horn")
+s1b <- get.samp(phy1b)
+
+perm <- do.permanova(phy1b, dist=dist1, ~temp*time)
+perm$time.pair.formatted <- perm$pairwise$time %>%
+  adjust.pairs(c("Day 0 vs 3" = "Day 0_vs_Day 3", 
+                 "Day 3 vs 8" = "Day 3_vs_Day 8", 
+                 "Day 8 vs 11" = "Day 11_vs_Day 8"))
+gtbla <- perm$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtblb <- perm$time.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+
+
+g.fig2.pcoa <- perm$ord$data %>%
+  arrange(lbl) %>%
+  ggplot(aes(x=axis1,y=axis2,shape=temp)) +
+  geom_point(aes(fill=time,color=time),size=4) + 
+  # geom_text_repel(size=3,show.legend = FALSE) +
+  # geom_text_repel(aes(label=lbl),size=3,vjust=1.4) +
+  geom_text(aes(label=lbl),size=3,vjust=1.4) +
+  # scale_fill_brewer(type="seq",palette=3) +
+  scale_shape_manual(values=c("n/a"=21, "-80C"=22, "-20C"=23, "4C"=24, "room temp"=25)) +
+  xlab(perm$ord.axes[[1]]) + ylab(perm$ord.axes[[2]]) +
+  theme(aspect.ratio=1)
+
+pos1 <- c(0.75,0.35)
+pos2 <- c(0.75,0.15)
+g.fig2 <- g.fig2.pcoa + 
+  patchwork::inset_element(gtbla,pos1[1],pos1[2],pos1[1],pos1[2]) +
+  patchwork::inset_element(gtblb,pos2[1],pos2[2],pos2[1],pos2[2])
+g.fig2
+
+# pdf("plots/fig1b - exp1 pcoa.pdf",width=8,height=8)
+# g.fig3
+# dev.off()
+# shell.exec("plots/fig1b - exp1 pcoa.pdf")
+
+
+# fig s2, pcoa and permanova using bray curtis -------------------------------
+
+phy1b <- phy1 %>%
+  mutate(storage=days!=0,
+         time=ordered(time),
+         temp=ordered(temp))
+dist1.bray <- calc.distance(phy1b,"pct.bray")
+s1b <- get.samp(phy1b)
+
+perm.bray <- do.permanova(phy1b, dist=dist1.bray, ~temp*time)
+perm.bray$time.pair.formatted <- perm.bray$pairwise$time %>%
+  adjust.pairs(c("Day 0 vs 3" = "Day 0_vs_Day 3",
+                 "Day 3 vs 8" = "Day 3_vs_Day 8",
+                 "Day 8 vs 11" = "Day 11_vs_Day 8"))
+gtbla.bray <- perm.bray$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtblb.bray <- perm.bray$time.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+
+g.fig.s2.pcoa.bray <- perm.bray$ord$data %>%
+  arrange(lbl) %>%
+  ggplot(aes(x=axis1,y=axis2,shape=temp)) +
+  geom_point(aes(fill=time,color=time),size=4) +
+  # geom_text_repel(size=3,show.legend = FALSE) +
+  # geom_text_repel(aes(label=lbl),size=3,vjust=1.4) +
+  geom_text(aes(label=lbl),size=3,vjust=1.4) +
+  # scale_fill_brewer(type="seq",palette=3) +
+  scale_shape_manual(values=c("n/a"=21, "-80C"=22, "-20C"=23, "4C"=24, "room temp"=25)) +
+  xlab(perm.bray$ord.axes[[1]]) + ylab(perm.bray$ord.axes[[2]]) +
+  theme(aspect.ratio=1)
+# g.fig.s2.pcoa.bray
+pos1 <- c(0.75,0.35)
+pos2 <- c(0.75,0.15)
+g.fig.s2.bray <- g.fig.s2.pcoa.bray +
+  patchwork::inset_element(gtbla.bray,pos1[1],pos1[2],pos1[1],pos1[2]) +
+  patchwork::inset_element(gtblb.bray,pos2[1],pos2[2],pos2[1],pos2[2])
+g.fig.s2.bray
+
+
+# Fig 4, QPCR --------------------------------------------------------------------
+
+
+s1b <- get.samp(phy1,stats=TRUE) %>%
+  mutate(log.qpcr.totalseqs=log(qpcr.totalseqs))
 qmod <- aov(log.qpcr.totalseqs ~ time * temp, data = s1b)
 qtbl <- broom::tidy(qmod)
 qtext <- qtbl %>% 
   filter(term!="Residuals") %>% 
   mutate(p.value=scales::pvalue(p.value),
-         term=str_replace(term,":"," %*% "),
-         pterm=str_glue("{term} P: {p.value}")) %>%
-  pull(pterm) %>% paste(collapse="; ") %>%
-  paste("ANOVA: ",.) %>%
-  paste0("'",.,"'") %>%
-  str_replace_all(fixed("%*%"),"'%*%'")
+         p.value=str_replace(p.value,"^(?!<)","="),
+         term=str_replace(term,":"," * "),
+         text=str_glue("{term} P{p.value}")) %>%
+  pull(text) %>% paste(collapse="; ") %>%
+  paste("ANOVA: ",.)
+qtext
+# contrasts for time
+qmod.time <- aov(log.qpcr.totalseqs ~ time, data = s1b)
+emm <- emmeans(qmod.time, ~ time)
+con <- contrast(emm, method = list(
+  "Day 0 vs 3" = c(-1,1,0,0),
+  "Day 3 vs 8" = c(0,-1,1,0),
+  "Day 8 vs 11" = c(0,0,-1,1)
+)) %>% summary()
+qtext2 <- con %>%
+  mutate(p.value.text=scales::pvalue(p.value),
+         p.value.text=str_replace(p.value.text,"^(?!<)","="),
+         p.value.text=paste0(contrast,": P",p.value.text)) %>%
+  pull(p.value.text) %>%
+  paste(collapse="; ") %>%
+  paste("Time contrasts: ",.)
+# %>%
+#   paste0("'",.,"'") %>%
+#   str_replace_all(fixed("%*%"),"'%*%'")
+
+qtext12 <- paste(qtext,qtext2,sep="\n") 
+qtext12 <- paste0("'",qtext12,"'")
+
 
 g1.qpcr <- ggplot(s1b,aes(x=lbl,y=qpcr.totalseqs)) +
   expand_limits(y=1e10) +
@@ -312,142 +668,334 @@ g1.qpcr <- ggplot(s1b,aes(x=lbl,y=qpcr.totalseqs)) +
   scale_y_continuous(trans=log_epsilon_trans(1e5),labels=pretty_power10) +
   ggplot2::labs(x="Sample", 
                 y="16S qPCR",
-                caption=parse(text=qtext))
+                caption=parse(text=qtext12))
 g1.qpcr
 
 
-
-
-
-# fig 2: exp 1, pcoa and permanova ---------------------------------------------------------------
-
-phy1b <- phy1 %>%
-  mutate(storage=days!=0,
-         time=ordered(time),
-         temp=ordered(temp))
-dist1 <- calc.distance(phy1b,"horn")
-s1b <- get.samp(phy1b)
-
-# valid
-permanova <- adonis2(dist1 ~ temp*time, data=s1b)
-permanova
-
-# beta dispersion not signif, therefore differences are not from spread, can proceed
-bd <- betadisper(dist1, s1b$temp)
-permutest(bd)
-# pairwise contrasts of time
-# pairwise0 <- pairwise.adonis(dist1,factors=s1$time, p.adjust.m="BH")
-pairwise <- pairwise.adonis2(dist1 ~ time, data=s1b) %>%
-  keep(is.data.frame) %>%
-  imap(~{
-    .x %>% rownames_to_column("element") %>% 
-      rename(p.value=`Pr(>F)`) %>% 
-      mutate(pair=.y) %>%
-      filter(!is.na(F)) %>% as_tibble()
-  }) %>% list_rbind()
-
-# generate pcoa plot with permanova results
-ord1 <- phy.ordinate(phy1b,method="PCoA",distance=dist1)
-g.fig2.pcoa <- ggplot(arrange(ord1$data,lbl),aes(x=axis1,y=axis2,shape=temp)) +
-  geom_point(aes(fill=time,color=time),size=4) + 
-  # geom_text_repel(size=3,show.legend = FALSE) +
-  # geom_text_repel(aes(label=lbl),size=3,vjust=1.4) +
-  geom_text(aes(label=lbl),size=3,vjust=1.4) +
-  # scale_fill_brewer(type="seq",palette=3) +
-  scale_shape_manual(values=c("n/a"=21, "-80C"=22, "-20C"=23, "4C"=24, "room temp"=25)) +
-  xlab("PC1") + ylab("PC2") +
-  theme(aspect.ratio=1)
-ptbl <- permanova %>% as.data.frame() %>% rownames_to_column("var") %>%
-  filter(!is.na(`Pr(>F)`)) %>%
-  mutate(var=str_replace_all(var,":"," %*% ")) %>%
-  select("Predictor"=var,"R^2"=R2,"italic(P)*'-value'"=`Pr(>F)`) %>% 
-  mutate(across(.cols=where(is.numeric),.fns=pretty_number))
-
-target.pairs <- c("Day 0_vs_Day 3" = "Day 0 vs Day 3", "Day 3_vs_Day 8" = "Day 3 vs Day 8", "Day 11_vs_Day 8" = "Day 8 vs Day 11")
-ptbl2 <- pairwise %>%
-  filter(pair %in% names(target.pairs)) %>%
-  mutate(pair=recode2(pair,target.pairs,as.factor=TRUE),
-         adjusted.pval=p.adjust(p.value,"BH")) %>%
-  arrange(pair) %>%
-  select("Pair"=pair,"R^2"=R2,"italic(P)*'-value (adj)'"=adjusted.pval) %>%
-  mutate(across(.cols=where(is.numeric),.fns=pretty_number))
-
-tt <- ttheme(base_style="light",base_size=9,
-             tbody.style = tbody_style(size=9,fill=NA,parse=TRUE),
-             colnames.style = colnames_style(size=9,fill=NA,parse=TRUE))
-gtbl1 <- ggtexttable(ptbl,rows=NULL,theme=tt)
-gtbl2 <- ggtexttable(ptbl2,rows=NULL,theme=tt)
-
-
-pos1 <- c(0.75,0.35)
-pos2 <- c(0.75,0.15)
-g.fig2 <- g.fig2.pcoa + 
-  patchwork::inset_element(gtbl1,pos1[1],pos1[2],pos1[1],pos1[2]) +
-  patchwork::inset_element(gtbl2,pos2[1],pos2[2],pos2[1],pos2[2])
-g.fig2
-
-pdf("plots/fig1b - exp1 pcoa.pdf",width=8,height=8)
-g.fig3
-dev.off()
-shell.exec("plots/fig1b - exp1 pcoa.pdf")
-
-# fig 4: step compare exp1 ------------------------------------------------------------
-
+# fig 5: step compare exp1 ------------------------------------------------------------
 
 samples.compare <- c("1B","1E","1H","1S","1Q","1Z")
-phy1.compare <- phy1 %>% 
-  mutate(compare=lbl %in% samples.compare,
-         lbl.compare=str_glue("{lbl3} (vs. {lbl.comparator})")) %>%
-  filter(compare|baseline)
+samples.compare.all <- phy1 %>% get.samp() %>% pull(lbl)
 
-otu1base <- phy1.compare %>% 
-  filter(baseline,prune_unused_taxa=FALSE) %>%
-  get.otu.melt(filter.zero=FALSE) %>%
-  transmute(otu,pctseqs0=pctseqs)
-otu1compare <- phy1.compare %>% 
-  filter(compare,prune_unused_taxa=FALSE) %>% 
-  get.otu.melt(filter.zero=FALSE) %>%
-  left_join(otu1base,by="otu") %>%
-  filter(pctseqs>0|pctseqs0>0) %>%
-  group_by(sample) %>%
-  arrange(desc(pctseqs0),desc(pctseqs)) %>%
-  mutate(col=row_number(),
-         extra=pctseqs0==0 & pctseqs>0) %>%
-  ungroup()
-s1compare <- phy1.compare %>% 
-  filter(compare,prune_unused_taxa=FALSE) %>% 
-  get.samp(stats=TRUE) %>%
-  mutate(label=str_glue("Horn={sprintf('%.3f',dist_horn)}"))
+make.step <- function(samples,phy=phy1) {
+  
+  phy1.compare <- phy1 %>% 
+    mutate(compare=lbl %in% samples,
+           lbl.compare=str_glue("{lbl3} (vs. {lbl.comparator})")) %>%
+    filter(compare|baseline)
+  
+  otu1base <- phy1.compare %>% 
+    filter(baseline,prune_unused_taxa=FALSE) %>%
+    get.otu.melt(filter.zero=FALSE) %>%
+    transmute(otu,pctseqs0=pctseqs)
+  otu1compare <- phy1.compare %>% 
+    filter(compare,prune_unused_taxa=FALSE) %>% 
+    get.otu.melt(filter.zero=FALSE) %>%
+    left_join(otu1base,by="otu") %>%
+    filter(pctseqs>0|pctseqs0>0) %>%
+    group_by(sample) %>%
+    arrange(desc(pctseqs0),desc(pctseqs)) %>%
+    mutate(col=row_number(),
+           extra=pctseqs0==0 & pctseqs>0) %>%
+    ungroup()
+  s1compare <- phy1.compare %>% 
+    filter(compare,prune_unused_taxa=FALSE) %>% 
+    get.samp(stats=TRUE) %>%
+    mutate(label=str_glue("Horn={sprintf('%.3f',dist_horn)}"))
+  
+  g1.asv <- ggplot() +
+    geom_col(data=otu1compare,aes(x=col,y=pctseqs,fill=otu)) +
+    geom_step(data=otu1compare,aes(x=col,y=pctseqs0),direction="mid") +
+    geom_text(data=s1compare,aes(x=Inf,y=Inf,label=label),hjust=1,vjust=1,color="blue") +
+    geom_rect(data=s1compare,aes(xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=Inf,linetype=baseline),
+              fill=NA,color="blue",show.legend=FALSE) +
+    scale_linetype_manual(values=c("TRUE"="longdash","FALSE"=NA)) +
+    geom_bracket(data=filter(otu1compare,extra),
+                 aes(x=col,y=ave(pctseqs,sample,FUN=max),
+                     fontsize=3,label="unique\nASVs"),tip="square") + 
+    scale_fill_taxonomy(name="Bacterial Taxa",data=otu1compare,fill=otu,tax.palette=pal) +
+    scale_y_continuous("Relative Abundance",trans=log_epsilon_trans(0.001)) +
+    # facet_wrap(~lbl.compare,nrow=2) +
+    ggplot2::labs(x="Bacterial strain (ASV)") +
+    theme(aspect.ratio=1,
+          legend.key.size = unit(0.85,"lines"),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          # axis.title = element_blank(), 
+          panel.background = element_blank())
+  
+  g1.asv
+}
 
-g1.asv <- ggplot() +
-  geom_col(data=otu1compare,aes(x=col,y=pctseqs,fill=otu)) +
-  geom_step(data=otu1compare,aes(x=col,y=pctseqs0),direction="mid") +
-  geom_text(data=s1compare,aes(x=Inf,y=Inf,label=label),hjust=1,vjust=1,color="blue") +
-  geom_rect(data=s1compare,aes(xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=Inf,linetype=baseline),
-            fill=NA,color="blue",show.legend=FALSE) +
-  scale_linetype_manual(values=c("TRUE"="longdash","FALSE"=NA)) +
-  geom_bracket(data=filter(otu1compare,extra),
-               aes(x=col,y=ave(pctseqs,sample,FUN=max),
-                   fontsize=3,label="unique\nASVs"),tip="square") + 
-  scale_fill_taxonomy(name="Bacterial Taxa",data=otu1compare,fill=otu,tax.palette=pal) +
-  scale_y_continuous("Relative Abundance",trans=log_epsilon_trans(0.001)) +
-  facet_wrap(~lbl.compare,nrow=2) +
-  theme(aspect.ratio=1,
-        legend.key.size = unit(0.85,"lines"),
-        axis.text = element_blank(), axis.ticks = element_blank(), 
-        axis.title = element_blank(), panel.background = element_blank())
-
+g1.asv <- make.step(samples.compare) + 
+  facet_wrap(~lbl.compare,nrow=2)
 g1.asv
+g1.asv.all <- make.step(samples.compare.all) + 
+  facet_wrap(~lbl.compare,nrow=4)
+g1.asv.all
 
-pdf("plots/fig1c - exp1 step compare.pdf",width=10,height=5)
-g1.asv
-dev.off()
+# pdf("plots/fig1c - exp1 step compare.pdf",width=10,height=5)
+# g1.asv
+# dev.off()
+# 
+# shell.exec("plots/fig1c - exp1 step compare.pdf")
 
-shell.exec("plots/fig1c - exp1 step compare.pdf")
+# fig 6 exp1 lefse -------------------------------------------------------------------
 
+phy1.lefse <- phy1 %>%   
+  mutate(time.group=fct_recode(time,
+                               "Day 0-8"="Day 0",
+                               "Day 0-8"="Day 3",
+                               "Day 0-8"="Day 8",
+                               "Day 11"="Day 11"))
+
+# s1 <- phy1.lefse %>% get.samp()
+
+set.seed(1)
+lda <- lda.effect(phy1.lefse,class="time.group",lda.cutoff=3) 
+
+# the table which can be printed
+lda.tbl <- lda %>%
+  filter(pass) %>%
+  arrange(direction) %>% 
+  select(direction,rank,taxonomy,taxon,taxrank,lda,kw.pvalue) %>%
+  mutate(across(.cols=where(is.numeric), .fns = ~sprintf("%.3f",.x)))
+
+lda.tbl %>% group_by(direction) %>% dt(fontsize=10)
+lda.tbl %>% copy.to.clipboard()
+
+
+
+
+# just for summarizing
+info <- get_taxonomy_info(phy1.lefse,pct.cutoff = 0.99)
+lda.info <- lda %>% left_join(select(info,taxonomy,grouper,mean.pct.of.parent),by="taxonomy")
+lda.tbl.final <- lda.info %>% group_by(direction,grouper) %>% 
+  slice(which.max(rank))
+lda.tbl.final %>% group_by(direction) %>% arrange(taxonomy) %>% dt()
+
+
+# fig 7: exp2 stackplot ---------------------------------------------------
+
+s2 <- get.samp(phy2)
+otu2 <- get.otu.melt(phy2)
+
+g2.tax <- ggplot(otu2) +
+  geom_taxonomy(aes(x=lbl,y=pctseqs,label=Species,fill=otu),
+                tax.palette=pal,label.split=TRUE,fontsize=3,width=width) +
+  geom_col(data=filter(s2,baseline),
+           aes(x=lbl,y=1,color="baseline sample (2A)"),fill=NA,width=width,
+           linetype="longdash",linewidth=0.75) +
+  scale_x_discrete("Sample",expand=expansion(add=0.5)) +
+  scale_y_continuous("Bacterial Composition\nRelative abundance",expand=FALSE) +
+  scale_color_manual("Sample Comparison",values=c("baseline sample (2A)"="red")) +
+  scale_fill_taxonomy(name="Bacterial taxa",data=otu2,fill=otu,tax.palette=pal) +
+  exp2.facet +
+  theme(legend.key.size = unit(0.85,"lines"),
+        panel.spacing.x = exp2.panel.spacing.x,
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank())
+g2.tax
+
+# fig 8: exp2 qpcr ----------------------------------------------------------------
+
+s2 <- get.samp(phy2) %>%
+  mutate(qpcr.lbl=ifelse(is.na(qpcr.totalseqs),"(undetectable)",NA_character_),
+         qpcr.totalseqs.impute=coalesce(qpcr.totalseqs,1000),
+         log.qpcr.totaleqs.impute=log(qpcr.totalseqs.impute))
+
+qmod <- aov(qpcr.totalseqs.impute ~ time+heat.75C+uv.sample+heat.autoclave+uv.dna, data = s2)
+qtbl <- broom::tidy(qmod)
+qtbl
+
+# alt
+
+qmod <- aov(qpcr.totalseqs.impute ~ time + heat + uv, data=s2)
+qtbl <- broom::tidy(qmod)
+qtbl
+# contrast
+# qmod.uv <- aov(log.qpcr.totalseqs ~ uv, data = s2)
+emm.uv <- emmeans(qmod, ~ uv)
+pairs(emm.uv,adjust="tukey")
+
+emm.heat <- emmeans(qmod, ~ heat)
+pairs(emm.heat,adjust="tukey")
+
+
+
+
+# qtbl
+qtext <- qtbl %>% 
+  filter(term!="Residuals") %>%
+  mutate(p.value=scales::pvalue(p.value),
+         p.value=str_replace(p.value,"^(?!<)","="),
+         term=str_replace(term,":"," * "),
+         text=str_glue("{term} P{p.value}")) %>%
+  pull(text) %>% paste(collapse="; ") %>%
+  str_replace_all("heat.autoclave","autoclave") %>%
+  str_replace_all("uv.dna","UV DNA") %>%
+  str_replace_all("uv.sample","UV") %>%
+  str_replace_all("heat.75C","75C") %>%
+  paste("ANOVA: ",.)
+# qtext
+qtext.lbl <- paste0("'",qtext,"'") %>%
+  str_replace_all("P=","'*italic(P)*'=") %>%
+  str_replace_all("75C","'*75*degree*C*'")
+qtext.lbl
+
+# qtext.lbl
+
+
+g.qpcr <- ggplot(s2) + 
+  geom_col(aes(x=lbl,y=qpcr.totalseqs),fill="steelblue",width=width) + 
+  geom_text(aes(x=lbl,y=0,label=qpcr.lbl),hjust=0,angle=90) +
+  scale_x_discrete("Sample",expand=expansion(add=0.5)) +
+  scale_y_continuous("Total abundance by 16S qPCR",trans=log_epsilon_trans(1000),
+                     # expand=FALSE,
+                     expand=expansion(mult=0.025),
+                     labels=pretty_power10) +
+  exp2.facet +
+  theme(panel.spacing.x=exp2.panel.spacing.x) +
+  labs(caption=parse(text=qtext.lbl))
+
+
+g.qpcr
+
+# fig 9: exp 2 pcoa and permanova -----------------------------------------
+
+
+phy2b <- phy2
+dist2 <- calc.distance(phy2b,"horn")
+s2b <- get.samp(phy2b)
+perm2 <- do.permanova(phy2b,dist2,~time+heat+uv)
+perm2$heat.pair.formatted <- perm2$pairwise$heat %>%
+  adjust.pairs(c("75C vs no heat" = "no heat_vs_75C", 
+                 # "no heat_vs_autoclave" = "no heat_vs_autoclave", 
+                 "autoclave vs 75C" = "75C_vs_autoclave"))
+perm2$uv.pair.formatted <- perm2$pairwise$uv %>%
+  adjust.pairs(c("no UV vs UV" = "UV_vs_no UV", 
+                 # "UV DNA_vs_no UV" = "UV DNA_vs_no UV",
+                 "UV vs UV DNA" = "UV_vs_UV DNA"))
+gtbl2a <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtbl2b <- perm2$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtbl2c <- perm2$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+
+g.fig8.pcoa <- perm2$ord$data %>%
+  arrange(lbl) %>%
+  ggplot(aes(x=axis1,y=axis2)) +
+  geom_point(aes(color=treatment),size=4,alpha=0.8) + 
+  geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
+  scale_color_brewer(type="qual",palette=3) +
+  xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
+  theme(aspect.ratio=1)
+
+pos1 <- c(0.75,0.55)
+pos2 <- c(0.75,0.4)
+pos3 <- c(0.75,0.25)
+
+g.fig8 <- g.fig8.pcoa +
+  patchwork::inset_element(gtbl2a,pos1[1],pos1[2],pos1[1],pos1[2]) +
+  patchwork::inset_element(gtbl2b,pos2[1],pos2[2],pos2[1],pos2[2]) +
+  patchwork::inset_element(gtbl2c,pos3[1],pos3[2],pos3[1],pos3[2])
+g.fig8
+
+
+# fig s3: distance 2 --------------------------------------------------------------
+
+phy1a <- phy1 %>%
+  mutate(x=as.numeric(lbl),
+         baseline=lbl=="1A",
+         dist=dist_mean.horn)
+
+phy2b <- phy2 %>%
+  mutate(x=as.numeric(lbl),
+         baseline=lbl=="1A",
+         dist=dist_2A)
+dist2 <- calc.distance(phy2b,"horn")
+s2b <- get.samp(phy2b) %>%
+  mutate(dist=dist_2A)
+
+dtext <- s2b %>% filter(sample=="2A") %>%
+  mutate(label="baseline\nsample",
+         x=1.5,y=0.02,
+         xend=1,yend=0.003)
+dtext.layer <- list(geom_text(data=dtext,aes(x=x,y=y,label=label),vjust=-0.02,lineheight=0.8),
+                    geom_segment(data=dtext,aes(x=x,y=y,xend=xend,yend=yend)))
+# 
+g2.dist <- ggplot(s2b) +
+  geom_col(aes(x=lbl,y=dist),fill="steelblue",width=width) +
+  geom_text(aes(x=lbl,y=dist,label=pretty_number(dist),color=baseline),
+            vjust=0,size=3,show.legend = FALSE) +
+  scale_y_continuous(name="Distance\n(compared with baseline)")  +
+  scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
+  dtext.layer +
+  xlab("Sample") +
+  exp2.facet +
+  theme(panel.spacing.x = exp2.panel.spacing.x)
+
+  
+g2.dist
+
+# +
+#   dtext.layer +
+#   scale_y_continuous(name="Distance\n(compared with baseline)")  +
+#   scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
+#   xlab("Sample") +
+#   exp1.facet +
+#   theme(panel.spacing.x = exp1.panel.spacing.x)
+# 
+# g1.dist
+
+
+# OLD: fig 9: exp2 contam ------------------------------------------------------
+
+phy2ax <- phy2a %>%
+  summarize_sample_data(pct.notcontam=mean(as.logical(not.contam)),
+                        pct.contam=mean(!as.logical(not.contam)),
+                        n.asv.contam=sum(!as.logical(not.contam)),
+                        pctseqs.contam=sum(pctseqs[!as.logical(not.contam)]),
+                        pctseqs.noncontam=sum(pctseqs[as.logical(not.contam)]),
+                        filter.zero=TRUE) %>%
+  add_dist("horn",comparator="TY.1_D0_NT",varname=dist_2A) %>%
+  add_dist("mean.horn",comparator="TY.1_D0_NT",varname=dist_2A_meanhorn) %>%
+  add_dist("horn",comparator="PCRNeg4",varname=dist_PCRNeg)
+
+otu2ax <- get.otu.melt(phy2ax)
+s2ax <- get.samp(phy2ax)
+
+
+
+exp2ax.panel.spacing.x <- s2ax %>% distinct(treatment,time) %>%
+  arrange(treatment,time) %>% 
+  group_by(treatment) %>%
+  transmute(x=ifelse(row_number()==n(),3.5,1.5)) %>%
+  ungroup() %>% slice(-n()) %>% pull(x) %>% unit("points")
+exp2.facet <- facet_nested(. ~ treatment+time,scales="free_x",space="free_x",
+                           nest_line=element_line(),
+                           resect=unit(3,"pt"),
+                           solo_line=TRUE)
+
+g.contam <- ggplot(s2ax) + 
+  geom_col(aes(x=lbl,y=pctseqs.contam),fill="dark gray") +
+  scale_x_discrete("Sample",expand=expansion(add=0.5)) +
+  scale_y_continuous("Proportion of Percent sequences contaminant",
+                     expand=expansion(mult=0.025),
+                     labels=scales::label_percent(1)) +
+  exp2.facet +
+  theme(panel.spacing.x=exp2ax.panel.spacing.x)
+
+g.contam
+
+
+
+
+# OLD ---------------------------------------------------------------------
 
 
 # fig 2A: stackplot ---------------------------------------------------------
+
+
+
 
 
 s2a <- get.samp(phy2a)
@@ -496,6 +1044,7 @@ facet <- facet_nested(. ~ treatment+time,scales="free_x",space="free_x",
                       resect=unit(3,"pt"),
                       solo_line=TRUE)
 
+
 width <- 0.95
 g.qpcr <- ggplot(samp2a) + 
   geom_col(aes(x=lbl3,y=qpcr.totalseqs),width=width) + 
@@ -528,10 +1077,12 @@ g.tax.compare <- ggplot(otu2a) +
         axis.text.y=element_blank(),
         axis.ticks=element_blank())
 
+g.qpcr
+g.asv.compare
+g.tax.compare
+
 g.fig2a <- gg.stack2(g.qpcr,g.asv.compare,g.tax.compare)
 g.fig2a
-
-
 
 # g.dist <- ggplot(s2a.long,aes(x=lbl3,y=value,color=name,group=name)) +
 #   geom_point() + geom_line() +
@@ -1667,9 +2218,9 @@ g2.asv
 
 # contam ------------------------------------------------------------------
 
-
-
 xx <- isNotContaminant(phy2a,neg="is.neg.control",detailed=TRUE)
+
+
 xx %>% glimpse()
 
 isContaminant(phy2a,neg="is.neg.control")
@@ -1678,10 +2229,8 @@ isContaminant()
 isNotContaminant()
 
 
-
-
-base <- phy2a %>% filter(sample=="TY.1_D0_NT") %>% get.otu.melt(sample_data=FALSE) %>% select(otu,taxid)
-ctrl <- phy2a %>% filter(lbl=="PCRNeg") %>% get.otu.melt(sample_data=FALSE) %>% select(otu,taxid)
+# base <- phy2a %>% filter(sample=="TY.1_D0_NT") %>% get.otu.melt(sample_data=FALSE) %>% select(otu,taxid)
+# ctrl <- phy2a %>% filter(lbl=="PCRNeg") %>% get.otu.melt(sample_data=FALSE) %>% select(otu,taxid)
 
 phy2ax <- phy2a %>% 
   mutate_tax_table(not.contam=isNotContaminant(.,neg="is.neg.control"),
@@ -1796,22 +2345,6 @@ gg.stack(g.breakdown,g.qpcr,g.tax,g.tax.nocontam)
 
 
 
-
-
-# lefse -------------------------------------------------------------------
-
-phy1.lefse = phy.tyler %>%
-  phy.collapse(taxranks=c("Superkingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")) %>%
-  filter(experiment==1) %>%
-  mutate(time.group=fct_recode(time,"Day 0-3"="Day 0","Day 0-3"="Day 3","Day 8-11"="Day 8","Day 8-11"="Day 11"),
-         time.group2=fct_recode(time,"Day 0-3"="Day 0","Day 0-3"="Day 3"))
-s1 <- phy1.lefse %>% get.samp()
-
-lda <- lda.effect(phy1.lefse,class="time.group")
-lda.plot(lda) + lda.clado(lda)
-
-lda.b <- lda.effect(phy1.lefse,class="time.group2")
-lda.plot(lda.b) + lda.clado(lda.b)
 
 
 
