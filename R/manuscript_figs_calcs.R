@@ -2882,6 +2882,25 @@ gg.stack(g.breakdown,g.qpcr,g.tax,g.tax.nocontam)
 
 
 
+# tyler clarifying exp 2 
+
+phy2b <- phy2
+dist2 <- calc.distance(phy2b,"horn")
+s2b <- get.samp(phy2b)
+
+
+# method 1: separate terms (heat.75 is signif which is not intuitive)
+adonis2(dist2 ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data=s2b)
+
+# method 2: one big term (doesn't work, nothing is signif in pairwise)
+adonis2(dist2 ~ time + treatment, data=s2b)
+pairwise.adonis(dist2,s2b$treatment)
+
+# method 3: two grouping terms (can switch to this, possibly)
+adonis2(dist2 ~ time + heat + uv, data=s2b)
+pairwise.adonis(dist2,s2b$heat)
+pairwise.adonis(dist2,s2b$uv)
+
 
 
 
