@@ -792,6 +792,8 @@ gtblb <- perm$time.pair.formatted %>%
   rename(`'Time pair'`=Pair) %>%
   ggtexttable(rows=NULL,theme=tt)
 
+size.scaling <- s1b$days %>% unique() %>% sort() %>% 
+  scales::rescale(to=c(2,6))
 
 g.fig2.pcoa <- perm$ord$data %>%
   arrange(lbl) %>%
@@ -998,80 +1000,34 @@ g2.tax.dist
 
 
 
+
 # fig 5, exp2 pcoa permanova ----------------------------------------------
 
 phy2b <- phy2
 dist2 <- calc.distance(phy2b,"horn")
 s2b <- get.samp(phy2b)
-# perm2 <- do.permanova(phy2b,dist2,~time+heat+uv)
-perm2 <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + uv.dna + heat.autoclave)
-
-perm2a <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + uv.dna + heat.autoclave)
-perm2b <- do.permanova(phy2b,dist2, ~time + heat + uv)
-perm2c <- do.permanova(phy2b,dist2, ~time + treatment)
-
-perm2a
 
 
+
+perm2 <- do.permanova(phy2b,dist2, ~time + heat + uv)
 
 perm2$tbl.formatted <- perm2$tbl.formatted %>%
   select(-`beta~'disper'~italic(P)`) %>%
-  mutate(Predictor=fct_recode(Predictor,"'time'" = "'time'", 
-                              "'75'*degree*'C'" = "'heat.75C'", 
-                              "'UV'" = "'uv.sample'", 
-                              "'UV DNA'" = "'uv.dna'", 
-                              "'autoclave'" = "'heat.autoclave'"))
+  mutate(Predictor=fct_recode(Predictor,"'UV'" = "'uv'"))
 
-gtbl2 <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+perm2$heat.pair.formatted <- perm2$tbl$contrasts$heat %>% 
+  adjust.pairs(c("no heat vs 75C" = "no heat_vs_75C", 
+                 "75C vs autoclave" = "75C_vs_autoclave"))
+perm2$uv.pair.formatted <- perm2$tbl$contrasts$uv %>% 
+  adjust.pairs(c("no UV vs UV" = "UV_vs_no UV", 
+                 "no UV vs UV DNA" = "UV DNA_vs_no UV"))
+
+gtbl2a <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtbl2b <- perm2$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtbl2c <- perm2$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+
 
 g.fig8.pcoa <- perm2$ord$data %>%
-  arrange(lbl) %>%
-  ggplot(aes(x=axis1,y=axis2)) +
-  geom_point(aes(color=treatment),size=4,alpha=0.8) + 
-  geom_text(aes(x=axis1,y=axis2,label=days),size=3,color="#616161",alpha=0.8) +
-  
-  geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
-  scale_color_brewer(type="qual",palette=3) +
-  xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
-  theme(!!!theme.settings,
-        aspect.ratio=1)
-
-
-pos1 <- c(0.65,0.55)
-
-g.fig8 <- g.fig8.pcoa +
-  patchwork::inset_element(gtbl2,pos1[1],pos1[2],pos1[1],pos1[2])
-g.fig8
-
-
-
-# Fig S5: exp2 pcoa permanova using bray ----------------------------------
-
-
-phy2b <- phy2
-dist2bray <- calc.distance(phy2b,"pct.bray")
-s2b <- get.samp(phy2b)
-# perm2 <- do.permanova(phy2b,dist2,~time+heat+uv)
-perm2 <- do.permanova(phy2b,dist2bray, ~time + heat.75C + uv.sample + heat.autoclave + uv.dna)
-
-# perm2a <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + uv.dna + heat.autoclave)
-# perm2b <- do.permanova(phy2b,dist2, ~time + heat + uv)
-# perm2c <- do.permanova(phy2b,dist2, ~time + treatment)
-
-perm2$tbl.formatted <- perm2$tbl.formatted %>%
-  select(-`beta~'disper'~italic(P)`) %>%
-  mutate(Predictor=fct_recode(Predictor,"'time'" = "'time'", 
-                              "'75'*degree*'C'" = "'heat.75C'", 
-                              "'UV'" = "'uv.sample'", 
-                              "'UV DNA'" = "'uv.dna'", 
-                              "'autoclave'" = "'heat.autoclave'"))
-
-gtbl2 <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
-
-size.scaling2 <- s2b$days %>% unique() %>% sort() %>% 
-  scales::rescale(to=c(3,5))
-
-g.fig.pcoa.bray <- perm2$ord$data %>%
   arrange(lbl) %>%
   ggplot(aes(x=axis1,y=axis2)) +
   geom_point(aes(color=treatment,
@@ -1091,34 +1047,96 @@ g.fig.pcoa.bray <- perm2$ord$data %>%
   theme(!!!theme.settings,
         aspect.ratio=1)
 
-g.fig.pcoa.bray
 
-pos1 <- c(0.65,0.55)
-
-g.fig.bray <- g.fig.pcoa.bray +
-  patchwork::inset_element(gtbl2,pos1[1],pos1[2],pos1[1],pos1[2])
-g.fig.bray
+pos1 <- c(0.65,0.75)
+pos2 <- c(0.65,0.6)
+pos3 <- c(0.65,0.47)
 
 
-g.fig8 / g.fig.bray
+g.fig8 <- g.fig8.pcoa +
+  patchwork::inset_element(gtbl2a,pos1[1],pos1[2],pos1[1],pos1[2]) +
+  patchwork::inset_element(gtbl2b,pos2[1],pos2[2],pos2[1],pos2[2]) +
+  patchwork::inset_element(gtbl2c,pos3[1],pos3[2],pos3[1],pos3[2])
+
+g.fig8
+
+
+# Fig S5: exp2 pcoa permanova using bray ----------------------------------
+
+
+phy2b <- phy2
+dist2 <- calc.distance(phy2b,"pct.bray")
+s2b <- get.samp(phy2b)
+
+
+
+perm2.bray <- do.permanova(phy2b,dist2, ~time + heat + uv)
+
+perm2.bray$tbl.formatted <- perm2.bray$tbl.formatted %>%
+  select(-`beta~'disper'~italic(P)`) %>%
+  mutate(Predictor=fct_recode(Predictor,"'UV'" = "'uv'"))
+
+perm2.bray$heat.pair.formatted <- perm2.bray$tbl$contrasts$heat %>% 
+  adjust.pairs(c("no heat vs 75C" = "no heat_vs_75C", 
+                 "75C vs autoclave" = "75C_vs_autoclave"))
+perm2.bray$uv.pair.formatted <- perm2.bray$tbl$contrasts$uv %>% 
+  adjust.pairs(c("no UV vs UV" = "UV_vs_no UV", 
+                 "no UV vs UV DNA" = "UV DNA_vs_no UV"))
+
+gtbl2a.bray <- perm2.bray$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtbl2b.bray <- perm2.bray$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtbl2c.bray <- perm2.bray$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+
+
+g.fig.s2.bray.pcoa <- perm2.bray$ord$data %>%
+  arrange(lbl) %>%
+  ggplot(aes(x=axis1,y=axis2)) +
+  geom_point(aes(color=treatment,
+                 fill=treatment,
+                 shape=treatment,
+                 size=time),alpha=0.7) + 
+  # geom_text(aes(x=axis1,y=axis2,label=days),size=3,color="#616161",alpha=0.8) +
+  geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
+  scale_color_brewer(type="qual",palette=3) +
+  scale_fill_brewer(type="qual",palette=3) +
+  xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
+  # scale_shape_manual(values=c(1:7)) +
+  scale_shape_manual(values=c("none"=21, "75C"=22, "UV"=23, "75C+UV"=24,
+                              "autoclave"=23, "autoclave+UV"=24, "UV DNA"=25)) +
+  scale_size_manual(values=size.scaling2) +
+  guides(colour = guide_legend(override.aes = list(size=4))) +
+  theme(!!!theme.settings,
+        aspect.ratio=1)
+
+
+
+pos1 <- c(0.65,0.75)
+pos2 <- c(0.65,0.6)
+pos3 <- c(0.65,0.47)
+
+
+
+g.fig.s2.bray <- g.fig.s2.bray.pcoa +
+  patchwork::inset_element(gtbl2a.bray,pos1[1],pos1[2],pos1[1],pos1[2]) +
+  patchwork::inset_element(gtbl2b.bray,pos2[1],pos2[2],pos2[1],pos2[2]) +
+  patchwork::inset_element(gtbl2c.bray,pos3[1],pos3[2],pos3[1],pos3[2])
+
+g.fig.s2.bray
 
 
 
 # fig S6: exp 2 alpha diversity ---------------------------------------------------------
 
-
-
 s2 <- phy2 %>% get.samp(stats=TRUE)
 
-itbl2 <- aov_contrast(InvSimpson ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data = s2) %>% 
-  mutate(term=fct_recode(term,"time" = "time", 
-                         "75'*degree*'C" = "heat.75C", 
-                         "UV" = "uv.sample", 
-                         "UV DNA" = "uv.dna", 
-                         "autoclave" = "heat.autoclave"))
-itext2 <- anova_oneline(itbl2)
+aov2.invsimp <- aov_contrast(InvSimpson ~ time + heat + uv, data = s2) %>% 
+  mutate(term=fct_recode(term,"UV"="uv"))
 
-
+itext2a <- anova_oneline(aov2.invsimp)
+itext2b <- aov2.invsimp$contrasts$uv %>%
+  filter(contrast!="no UV vs UV DNA") %>%
+  contrast_oneline("UV contrasts")
+itext2ab <- str_glue("atop({itext2a},{itext2b})")
 
 g2.invsimpson <- ggplot(s2,aes(x=lbl,y=InvSimpson)) +
   geom_col(fill="steelblue") +
@@ -1128,53 +1146,30 @@ g2.invsimpson <- ggplot(s2,aes(x=lbl,y=InvSimpson)) +
   ggplot2::labs(title="Inverse Simpson index",
                 x="Sample", 
                 y="Inverse Simpson index",
-                caption=parse(text=itext2))
-
+                caption=parse(text=itext2ab))
 g2.invsimpson
-
-# stbl2 <- aov_contrast(Shannon ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data = s2) %>% 
-#   mutate(term=fct_recode(term,"time" = "time", 
-#                          "75'*degree*'C" = "heat.75C", 
-#                          "UV" = "uv.sample", 
-#                          "UV DNA" = "uv.dna", 
-#                          "autoclave" = "heat.autoclave"))
-# stext2 <- anova_oneline(stbl2)
-# 
-# g2.shannon <- ggplot(s2,aes(x=lbl,y=Shannon)) +
-#   expand_limits(y=5.5) +
-#   geom_col(fill="purple") +
-#   exp2.facet + 
-#   theme(!!!theme.settings,
-#         panel.spacing.x = exp2.panel.spacing.x) +
-#   ggplot2::labs(title="Shannon index",
-#                 x="Sample", 
-#                 y="Shannon index",
-#                 caption=parse(text=stext2))
-# 
-# g2.alpha.diversity <- g2.invsimpson / g2.shannon
-# g2.alpha.diversity
-
-
-
-
 
 
 # fig S7: exp2 qpcr ----------------------------------------------------------------
-
 
 s2 <- get.samp(phy2) %>%
   mutate(qpcr.lbl=ifelse(is.na(qpcr.totalseqs),"(undetectable)",NA_character_),
          qpcr.totalseqs.impute=coalesce(qpcr.totalseqs,1000),
          log.qpcr.totalseqs.impute=log(qpcr.totalseqs.impute))
 
-aov2.qpcr <- aov_contrast(log.qpcr.totalseqs.impute ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data=s2) %>%
-  mutate(term=fct_recode(term,"time" = "time", 
-                         "75'*degree*'C" = "heat.75C", 
-                         "UV" = "uv.sample", 
-                         "UV DNA" = "uv.dna", 
-                         "autoclave" = "heat.autoclave"))
+aov2.qpcr <- aov_contrast(log.qpcr.totalseqs.impute ~ time + heat + uv, data=s2) %>% 
+  mutate(term=fct_recode(term,"UV"="uv"))
 
-qtext <- anova_oneline(aov2.qpcr)
+
+qtext2a <- anova_oneline(aov2.qpcr)
+qtext2b <- aov2.qpcr$contrasts$uv %>%
+  filter(contrast!="no UV vs UV DNA") %>%
+  contrast_oneline("UV contrasts")
+qtext2c <- aov2.qpcr$contrasts$heat %>%
+  filter(contrast!="no heat vs autoclave") %>%
+  contrast_oneline("heat contrasts")
+# qtext2ab <- str_glue("atop({qtext2a},{qtext2b}*' ; '*{qtext2c})")
+qtext2ab <- str_glue("atop({qtext2a},{qtext2b},{qtext2c})")
 
 g2.qpcr <- ggplot(s2) + 
   geom_col(aes(x=lbl,y=qpcr.totalseqs),fill="steelblue",width=width) + 
@@ -1186,12 +1181,10 @@ g2.qpcr <- ggplot(s2) +
                      labels=pretty_power10) +
   exp2.facet +
   theme(panel.spacing.x=exp2.panel.spacing.x) +
-  labs(caption=parse(text=qtext))
+  labs(caption=parse(text=qtext2ab))
 
 
 g2.qpcr
-
-
 
 
 
@@ -1229,7 +1222,6 @@ g.seqloss <- ggplot(tbl2.long,aes(x=name,y=value,color=treatment,label=label,gro
   scale_y_continuous("Number of sequences",trans=log_epsilon_trans(1e3))
 
 g.seqloss
-
 
 # fig 6 and S9 step exp 2 --------------------------------------------------------------
 
@@ -1296,6 +1288,205 @@ lda.uvdna %>% lda.clado()
 
 tbl.autoclave %>% copy.to.clipboard()
 tbl.uvdna %>% copy.to.clipboard()
+
+
+
+
+# PRIOR fig 5, exp2 pcoa permanova ----------------------------------------------
+
+phy2b <- phy2
+dist2 <- calc.distance(phy2b,"horn")
+s2b <- get.samp(phy2b)
+# perm2 <- do.permanova(phy2b,dist2,~time+heat+uv)
+perm2 <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + uv.dna + heat.autoclave)
+
+# perm2a <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + uv.dna + heat.autoclave)
+# perm2b <- do.permanova(phy2b,dist2, ~time + heat + uv)
+# perm2c <- do.permanova(phy2b,dist2, ~time + treatment)
+
+perm2$tbl.formatted <- perm2$tbl.formatted %>%
+  select(-`beta~'disper'~italic(P)`) %>%
+  mutate(Predictor=fct_recode(Predictor,"'time'" = "'time'", 
+                              "'75'*degree*'C'" = "'heat.75C'", 
+                              "'UV'" = "'uv.sample'", 
+                              "'UV DNA'" = "'uv.dna'", 
+                              "'autoclave'" = "'heat.autoclave'"))
+
+gtbl2 <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+size.scaling2 <- s2b$days %>% unique() %>% sort() %>% 
+  scales::rescale(to=c(3,5))
+g.fig8.pcoa <- perm2$ord$data %>%
+  arrange(lbl) %>%
+  ggplot(aes(x=axis1,y=axis2)) +
+  geom_point(aes(color=treatment,
+                 fill=treatment,
+                 shape=treatment,
+                 size=time),alpha=0.7) + 
+  geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
+  scale_color_brewer(type="qual",palette=3) +
+  scale_fill_brewer(type="qual",palette=3) +
+  xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
+  scale_shape_manual(values=c("none"=21, "75C"=22, "UV"=23, "75C+UV"=24,
+                              "autoclave"=23, "autoclave+UV"=24, "UV DNA"=25)) +
+  scale_size_manual(values=size.scaling2) +
+  guides(colour = guide_legend(override.aes = list(size=4))) +
+  theme(!!!theme.settings,
+        aspect.ratio=1)
+
+pos1 <- c(0.65,0.55)
+
+g.fig8 <- g.fig8.pcoa +
+  patchwork::inset_element(gtbl2,pos1[1],pos1[2],pos1[1],pos1[2])
+g.fig8
+
+
+
+# PRIOR Fig S5: exp2 pcoa permanova using bray ----------------------------------
+
+
+phy2b <- phy2
+dist2bray <- calc.distance(phy2b,"pct.bray")
+s2b <- get.samp(phy2b)
+# perm2 <- do.permanova(phy2b,dist2,~time+heat+uv)
+perm2 <- do.permanova(phy2b,dist2bray, ~time + heat.75C + uv.sample + heat.autoclave + uv.dna)
+
+# perm2a <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + uv.dna + heat.autoclave)
+# perm2b <- do.permanova(phy2b,dist2, ~time + heat + uv)
+# perm2c <- do.permanova(phy2b,dist2, ~time + treatment)
+
+perm2$tbl.formatted <- perm2$tbl.formatted %>%
+  select(-`beta~'disper'~italic(P)`) %>%
+  mutate(Predictor=fct_recode(Predictor,"'time'" = "'time'", 
+                              "'75'*degree*'C'" = "'heat.75C'", 
+                              "'UV'" = "'uv.sample'", 
+                              "'UV DNA'" = "'uv.dna'", 
+                              "'autoclave'" = "'heat.autoclave'"))
+
+gtbl2 <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+
+size.scaling2 <- s2b$days %>% unique() %>% sort() %>% 
+  scales::rescale(to=c(3,5))
+
+g.fig.pcoa.bray <- perm2$ord$data %>%
+  arrange(lbl) %>%
+  ggplot(aes(x=axis1,y=axis2)) +
+  geom_point(aes(color=treatment,
+                 fill=treatment,
+                 shape=treatment,
+                 size=time),alpha=0.7) + 
+  # geom_text(aes(x=axis1,y=axis2,label=days),size=3,color="#616161",alpha=0.8) +
+  geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
+  scale_color_brewer(type="qual",palette=3) +
+  scale_fill_brewer(type="qual",palette=3) +
+  xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
+  # scale_shape_manual(values=c(1:7)) +
+  scale_shape_manual(values=c("none"=21, "75C"=22, "UV"=23, "75C+UV"=24,
+                              "autoclave"=23, "autoclave+UV"=24, "UV DNA"=25)) +
+  scale_size_manual(values=size.scaling2) +
+  guides(colour = guide_legend(override.aes = list(size=4))) +
+  theme(!!!theme.settings,
+        aspect.ratio=1)
+
+g.fig.pcoa.bray
+
+pos1 <- c(0.65,0.55)
+
+g.fig.bray <- g.fig.pcoa.bray +
+  patchwork::inset_element(gtbl2,pos1[1],pos1[2],pos1[1],pos1[2])
+g.fig.bray
+
+
+g.fig8 / g.fig.bray
+
+
+# PRIOR fig S6: exp 2 alpha diversity ---------------------------------------------------------
+
+
+s2 <- phy2 %>% get.samp(stats=TRUE)
+
+itbl2 <- aov_contrast(InvSimpson ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data = s2) %>% 
+  mutate(term=fct_recode(term,"time" = "time", 
+                         "75'*degree*'C" = "heat.75C", 
+                         "UV" = "uv.sample", 
+                         "UV DNA" = "uv.dna", 
+                         "autoclave" = "heat.autoclave"))
+itext2 <- anova_oneline(itbl2)
+
+
+
+g2.invsimpson <- ggplot(s2,aes(x=lbl,y=InvSimpson)) +
+  geom_col(fill="steelblue") +
+  exp2.facet + 
+  theme(!!!theme.settings,
+        panel.spacing.x = exp2.panel.spacing.x) +
+  ggplot2::labs(title="Inverse Simpson index",
+                x="Sample", 
+                y="Inverse Simpson index",
+                caption=parse(text=itext2))
+
+g2.invsimpson
+
+# stbl2 <- aov_contrast(Shannon ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data = s2) %>% 
+#   mutate(term=fct_recode(term,"time" = "time", 
+#                          "75'*degree*'C" = "heat.75C", 
+#                          "UV" = "uv.sample", 
+#                          "UV DNA" = "uv.dna", 
+#                          "autoclave" = "heat.autoclave"))
+# stext2 <- anova_oneline(stbl2)
+# 
+# g2.shannon <- ggplot(s2,aes(x=lbl,y=Shannon)) +
+#   expand_limits(y=5.5) +
+#   geom_col(fill="purple") +
+#   exp2.facet + 
+#   theme(!!!theme.settings,
+#         panel.spacing.x = exp2.panel.spacing.x) +
+#   ggplot2::labs(title="Shannon index",
+#                 x="Sample", 
+#                 y="Shannon index",
+#                 caption=parse(text=stext2))
+# 
+# g2.alpha.diversity <- g2.invsimpson / g2.shannon
+# g2.alpha.diversity
+
+
+
+
+
+
+# PRIOR fig S7: exp2 qpcr ----------------------------------------------------------------
+
+
+s2 <- get.samp(phy2) %>%
+  mutate(qpcr.lbl=ifelse(is.na(qpcr.totalseqs),"(undetectable)",NA_character_),
+         qpcr.totalseqs.impute=coalesce(qpcr.totalseqs,1000),
+         log.qpcr.totalseqs.impute=log(qpcr.totalseqs.impute))
+
+aov2.qpcr <- aov_contrast(log.qpcr.totalseqs.impute ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data=s2) %>%
+  mutate(term=fct_recode(term,"time" = "time", 
+                         "75'*degree*'C" = "heat.75C", 
+                         "UV" = "uv.sample", 
+                         "UV DNA" = "uv.dna", 
+                         "autoclave" = "heat.autoclave"))
+
+qtext <- anova_oneline(aov2.qpcr)
+
+g2.qpcr <- ggplot(s2) + 
+  geom_col(aes(x=lbl,y=qpcr.totalseqs),fill="steelblue",width=width) + 
+  geom_text(aes(x=lbl,y=0,label=qpcr.lbl),hjust=0,angle=90) +
+  scale_x_discrete("Sample",expand=expansion(add=0.5)) +
+  scale_y_continuous("Total abundance by 16S qPCR",trans=log_epsilon_trans(1000),
+                     # expand=FALSE,
+                     expand=expansion(mult=0.025),
+                     labels=pretty_power10) +
+  exp2.facet +
+  theme(panel.spacing.x=exp2.panel.spacing.x) +
+  labs(caption=parse(text=qtext))
+
+
+g2.qpcr
+
+
+
 
 
 
@@ -2888,18 +3079,36 @@ phy2b <- phy2
 dist2 <- calc.distance(phy2b,"horn")
 s2b <- get.samp(phy2b)
 
-
 # method 1: separate terms (heat.75 is signif which is not intuitive)
 adonis2(dist2 ~ time + heat.75C + uv.sample + uv.dna + heat.autoclave, data=s2b)
 
 # method 2: one big term (doesn't work, nothing is signif in pairwise)
 adonis2(dist2 ~ time + treatment, data=s2b)
+
 pairwise.adonis(dist2,s2b$treatment)
 
 # method 3: two grouping terms (can switch to this, possibly)
 adonis2(dist2 ~ time + heat + uv, data=s2b)
 pairwise.adonis(dist2,s2b$heat)
 pairwise.adonis(dist2,s2b$uv)
+
+pp <- phy2 %>% filter(treatment %in% c("none","autoclave"))
+ss <- pp %>% get.samp()
+dd <- calc.distance(pp,"horn")
+adonis2(dd ~ time + treatment, data=ss)
+
+s2b
+
+
+
+
+
+
+
+
+
+
+
 
 
 
