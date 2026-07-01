@@ -1025,7 +1025,8 @@ perm2$uv.pair.formatted <- perm2$tbl$contrasts$uv %>%
 gtbl2a <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
 gtbl2b <- perm2$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
 gtbl2c <- perm2$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
-
+size.scaling2 <- s2b$days %>% unique() %>% sort() %>% 
+  scales::rescale(to=c(3,5))
 
 g.fig8.pcoa <- perm2$ord$data %>%
   arrange(lbl) %>%
@@ -1086,7 +1087,8 @@ perm2.bray$uv.pair.formatted <- perm2.bray$tbl$contrasts$uv %>%
 gtbl2a.bray <- perm2.bray$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
 gtbl2b.bray <- perm2.bray$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
 gtbl2c.bray <- perm2.bray$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
-
+size.scaling2 <- s2b$days %>% unique() %>% sort() %>% 
+  scales::rescale(to=c(3,5))
 
 g.fig.s2.bray.pcoa <- perm2.bray$ord$data %>%
   arrange(lbl) %>%
@@ -1169,7 +1171,7 @@ qtext2c <- aov2.qpcr$contrasts$heat %>%
   filter(contrast!="no heat vs autoclave") %>%
   contrast_oneline("heat contrasts")
 # qtext2ab <- str_glue("atop({qtext2a},{qtext2b}*' ; '*{qtext2c})")
-qtext2ab <- str_glue("atop({qtext2a},{qtext2b},{qtext2c})")
+qtext2ab <- str_glue("atop({qtext2a},{qtext2b}*'  ;   '*{qtext2c})")
 
 g2.qpcr <- ggplot(s2) + 
   geom_col(aes(x=lbl,y=qpcr.totalseqs),fill="steelblue",width=width) + 
@@ -1194,32 +1196,33 @@ g2.qpcr
 
 
 
-
-
-tbl2.seqs <- phy2 %>% get.samp() %>%
-  select(sample,lbl,lbl3,treatment,time,
-         input,filtered,denoised1,denoised2,merged,seqtab,nochim,seqtab.asvs,nochim.asvs) %>%
+tbl2.seqs <- phy2 %>% get.samp(stats=TRUE) %>%
+  select(sample,lbl,lbl3,treatment,time,input,filtered,denoised1,denoised2,merged,seqtab,nochim,seqtab.asvs,nochim.asvs,nseqs,everything()) %>%
   arrange(lbl)
-tbl2.seqs %>% dt()
+# tbl2.seqs %>% dt()
 
-tbl.vars <- c("input","filtered","seqtab","nochim")
+tbl.vars <- c("input","filtered","seqtab","nochim","nseqs")
+
+
 tbl2.long <- tbl2.seqs %>%
   pivot_longer(cols=all_of(tbl.vars)) %>%
-  mutate(label=ifelse(name=="nochim",as.character(lbl3),NA_character_),
+  mutate(label=ifelse(name=="nseqs",as.character(lbl3),NA_character_),
          name=factor(name,levels=tbl.vars),
          name=fct_recode(name,"demultiplexing" = "input", 
                          "filtering" = "filtered", 
                          "denoising" = "seqtab", 
-                         "chimera removal" = "nochim"))
+                         "chimera removal" = "nochim",
+                         "contaminant removal"="nseqs"))
 
 g.seqloss <- ggplot(tbl2.long,aes(x=name,y=value,color=treatment,label=label,group=lbl)) +
   geom_point() +
+  expand_limits(y=c(0,1e7)) +
   # geom_text(hjust=0) +
-  geom_text_repel(hjust=0,nudge_y=0,color="black",xlim=c(4.25)) +
-  expand_limits(x=5.25) +
+  geom_text_repel(hjust=0,nudge_y=0,color="black",xlim=c(5.25)) +
+  expand_limits(x=6.25) +
   geom_line() +
   xlab("Sequence processing step") +
-  scale_y_continuous("Number of sequences",trans=log_epsilon_trans(1e3))
+  scale_y_continuous("Number of sequences",trans=log_epsilon_trans(1e5))
 
 g.seqloss
 
