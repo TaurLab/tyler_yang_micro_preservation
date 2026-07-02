@@ -301,7 +301,7 @@ do.permanova.old <- function(phy,dist,form,seed=1) {
 
 
 
-do.permanova <- function(phy,dist,form,seed=1) {
+do.permanova <- function(phy,dist,form,seed=1,permutations=1e5) {
   set.seed(seed)
   if (is.character(dist)) {
     .dist <- calc.distance(phy,dist)
@@ -310,7 +310,7 @@ do.permanova <- function(phy,dist,form,seed=1) {
   }
   s <- get.samp(phy)
   form <- as.formula(paste(".dist",deparse(form)))
-  permanova.test <- adonis2(form, data=s, permutations=1e5)
+  permanova.test <- adonis2(form, data=s, permutations=permutations,by="terms")
   permanova.tbl <- permanova.test %>% broom::tidy() %>%
     filter(!is.na(statistic)) %>%
     mutate(signif=p.value<0.05,
@@ -811,6 +811,7 @@ g.fig2 <- g.fig2.pcoa +
   patchwork::inset_element(gtbla,pos1[1],pos1[2],pos1[1],pos1[2]) +
   patchwork::inset_element(gtblb,pos2[1],pos2[2],pos2[1],pos2[2])
 g.fig2
+
 
 
 
