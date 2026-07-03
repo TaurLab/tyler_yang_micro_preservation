@@ -301,7 +301,7 @@ do.permanova.old <- function(phy,dist,form,seed=1) {
 
 
 
-do.permanova <- function(phy,dist,form,seed=1,permutations=1e5) {
+do.permanova.old2 <- function(phy,dist,form,by="terms",seed=1,permutations=1e5) {
   set.seed(seed)
   if (is.character(dist)) {
     .dist <- calc.distance(phy,dist)
@@ -310,7 +310,7 @@ do.permanova <- function(phy,dist,form,seed=1,permutations=1e5) {
   }
   s <- get.samp(phy)
   form <- as.formula(paste(".dist",deparse(form)))
-  permanova.test <- adonis2(form, data=s, permutations=permutations,by="terms")
+  permanova.test <- adonis2(form, data=s, permutations=permutations,by=by)
   permanova.tbl <- permanova.test %>% broom::tidy() %>%
     filter(!is.na(statistic)) %>%
     mutate(signif=p.value<0.05,
@@ -377,6 +377,92 @@ do.permanova <- function(phy,dist,form,seed=1,permutations=1e5) {
        tbl=tbl,
        tbl.formatted=tbl.formatted)
 }
+
+
+
+do.permanova <- function(phy,dist,form,by="terms",seed=1,permutations=1e5) {
+  set.seed(seed)
+  if (is.character(dist)) {
+    .dist <- calc.distance(phy,dist)
+  } else {
+    .dist <- dist
+  }
+  s <- get.samp(phy)
+  form <- as.formula(paste(".dist",deparse(form)))
+  permanova.test <- adonis2(form, data=s, permutations=permutations,by=by)
+  permanova.tbl <- permanova.test %>% broom::tidy() %>%
+    filter(!is.na(statistic)) %>%
+    mutate(signif=p.value<0.05,
+           stars=p.value.asterisk(p.value))
+  allterms <- permanova.tbl$term
+  
+  permanova.tbl2 <- permanova.tbl %>%
+    mutate(
+      beta.dispersion.pvalue=map_dbl(term,function(term) {
+        if (!(term %in% names(s))) {return(NA_real_)}
+        bd <- betadisper(.dist, s[[term]])
+        permutest <- permutest(bd)
+        bd.pval <- permutest$tab %>%
+          rownames_to_column("var") %>%
+          filter(var=="Groups") %>% pull(`Pr(>F)`)
+        return(bd.pval)
+      }))
+  
+  tbl <- permanova.tbl2 %>%
+    mutate(n.lvls=map_int(term,~{
+      if (.x %in% names(s)) {
+        return(n_distinct(s[[.x]]))
+      } else {
+        return(NA_integer_)
+      }
+    }),
+    do.pairwise=signif & !is.na(n.lvls) & n.lvls>2,
+    contrasts=map2(term,do.pairwise,function(term,do) {
+      # first model is what gets pairwise
+      other.terms <- setdiff(allterms,term) 
+      model.terms <- c(term,other.terms) %>% paste(collapse=" + ")
+      form <- as.formula(paste0(".dist ~ ",model.terms))
+      pairwise <- pairwise.adonis2(form, data=s,nperm=permutations)
+      tbl <- pairwise %>% 
+        keep(is.data.frame) %>%
+        imap(~{
+          .x %>% rownames_to_column("element") %>%
+            rename(p.value=`Pr(>F)`) %>%
+            mutate(pair=.y) %>%
+            # filter(!is.na(F)) %>% 
+            filter(element==term) %>%
+            as_tibble()
+        }) %>% list_rbind()
+      return(tbl)
+    }))
+  
+  names(tbl$contrasts) <- tbl$term
+  # perm$tbl$beta.dispersion.pvalue
+  
+  tbl.formatted <- tbl %>% 
+    mutate(across(.cols=ends_with("p.value"),.fns=~scales::pvalue(.x)),
+           # beta.dispersion.pvalue=str_replace_all(beta.dispersion.pvalue,"","")
+           term=str_replace_all(term,":","'%*%'")) %>%
+    select("Predictor"=term,"R^2"=R2,"italic(P)*'-value'"=p.value,
+           "beta~'disper'~italic(P)"=beta.dispersion.pvalue) %>%
+    mutate(across(.cols=where(is.numeric),.fns=pretty_number),
+           across(.cols=everything(),.fns=~paste0("'",.x,"'")),
+           across(.cols=everything(),.fns=~ifelse(.x=="'NA'","''",.x)))
+  
+  ord <- phy.ordinate(phy,method="PCoA",distance=dist)
+  axes <- ord$obj$values$Rel_corr_eig %>% 
+    imap(~{
+      var <- paste0("PC",.y)
+      pct <- scales::label_percent(accuracy=0.1)(.x)
+      str_glue("{var} ({pct})")
+    })
+  
+  list(ord=ord,
+       ord.axes=axes,
+       tbl=tbl,
+       tbl.formatted=tbl.formatted)
+}
+
 adjust.pairs <- function(pairwise.table,pairs=NULL) {
   if (is.null(pairs)) {
     pairs <- pairwise.table$pair
@@ -777,13 +863,11 @@ phy1b <- phy1 %>%
 dist1 <- calc.distance(phy1b,"horn")
 s1b <- get.samp(phy1b)
 
-perm <- do.permanova(phy1b, dist=dist1, ~temp*time)
-
+perm <- do.permanova(phy1b, dist=dist1, ~temp*time, by="terms")
 perm$time.pair.formatted <- perm$tbl$contrasts$time %>%
   adjust.pairs(c("Day 0 vs 3" = "Day 0_vs_Day 3", 
                  "Day 3 vs 8" = "Day 3_vs_Day 8", 
                  "Day 8 vs 11" = "Day 11_vs_Day 8"))
-
 
 gtbla <- perm$tbl.formatted %>% 
   select(-`beta~'disper'~italic(P)`) %>%
@@ -798,12 +882,37 @@ size.scaling <- s1b$days %>% unique() %>% sort() %>%
 g.fig2.pcoa <- perm$ord$data %>%
   arrange(lbl) %>%
   ggplot(aes(x=axis1,y=axis2,shape=temp)) +
-  geom_point(aes(fill=time,color=time),size=4) + 
+  geom_point(aes(fill=temp,
+                 color=temp,
+                 size=time)) + 
   geom_text(aes(label=lbl),size=3,vjust=1.4) +
+  scale_size_manual(values=size.scaling) +
   scale_shape_manual(values=c("n/a"=21, "-80C"=22, "-20C"=23, "4C"=24, "room temp"=25)) +
   xlab(perm$ord.axes[[1]]) + ylab(perm$ord.axes[[2]]) +
+  guides(colour = guide_legend(override.aes = list(size=4))) +
   theme(!!!theme.settings,
         aspect.ratio=1)
+
+
+# g.fig8.pcoa <- perm2$ord$data %>%
+#   arrange(lbl) %>%
+#   ggplot(aes(x=axis1,y=axis2)) +
+#   geom_point(aes(color=treatment,
+#                  fill=treatment,
+#                  shape=treatment,
+#                  size=time),alpha=0.7) + 
+#   # geom_text(aes(x=axis1,y=axis2,label=days),size=3,color="#616161",alpha=0.8) +
+#   geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
+#   scale_color_brewer(type="qual",palette=3) +
+#   scale_fill_brewer(type="qual",palette=3) +
+#   xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
+#   # scale_shape_manual(values=c(1:7)) +
+#   scale_shape_manual(values=c("none"=21, "75C"=22, "UV"=23, "75C+UV"=24,
+#                               "autoclave"=23, "autoclave+UV"=24, "UV DNA"=25)) +
+#   scale_size_manual(values=size.scaling2) +
+#   guides(colour = guide_legend(override.aes = list(size=4))) +
+#   theme(!!!theme.settings,
+#         aspect.ratio=1)
 
 pos1 <- c(0.75,0.35)
 pos2 <- c(0.75,0.15)
@@ -811,7 +920,6 @@ g.fig2 <- g.fig2.pcoa +
   patchwork::inset_element(gtbla,pos1[1],pos1[2],pos1[1],pos1[2]) +
   patchwork::inset_element(gtblb,pos2[1],pos2[2],pos2[1],pos2[2])
 g.fig2
-
 
 
 
@@ -853,15 +961,31 @@ size.scaling <- s1b$days %>% unique() %>% sort() %>%
 g.fig.s2.pcoa.bray <- perm.bray$ord$data %>%
   arrange(lbl) %>%
   ggplot(aes(x=axis1,y=axis2,shape=temp)) +
-  geom_point(aes(fill=temp,color=temp,
-                 shape=temp,size=time)) + 
+  geom_point(aes(fill=temp,
+                 color=temp,
+                 size=time)) + 
   geom_text(aes(label=lbl),size=3,vjust=1.4) +
-  scale_shape_manual(values=c("n/a"=21, "-80C"=22, "-20C"=23, "4C"=24, "room temp"=25)) +
   scale_size_manual(values=size.scaling) +
-  xlab(perm.bray$ord.axes[[1]]) + ylab(perm.bray$ord.axes[[2]]) +
+  scale_shape_manual(values=c("n/a"=21, "-80C"=22, "-20C"=23, "4C"=24, "room temp"=25)) +
+  xlab(perm$ord.axes[[1]]) + ylab(perm$ord.axes[[2]]) +
   guides(colour = guide_legend(override.aes = list(size=4))) +
   theme(!!!theme.settings,
         aspect.ratio=1)
+
+g.fig2.pcoa <- perm$ord$data %>%
+  arrange(lbl) %>%
+  ggplot(aes(x=axis1,y=axis2,shape=temp)) +
+  geom_point(aes(fill=temp,
+                 color=temp,
+                 size=time)) + 
+  geom_text(aes(label=lbl),size=3,vjust=1.4) +
+  scale_size_manual(values=size.scaling) +
+  scale_shape_manual(values=c("n/a"=21, "-80C"=22, "-20C"=23, "4C"=24, "room temp"=25)) +
+  xlab(perm$ord.axes[[1]]) + ylab(perm$ord.axes[[2]]) +
+  guides(colour = guide_legend(override.aes = list(size=4))) +
+  theme(!!!theme.settings,
+        aspect.ratio=1)
+
 # g.fig.s2.pcoa.bray
 pos1 <- c(0.75,0.73)
 pos2 <- c(0.75,0.91)
@@ -1007,21 +1131,23 @@ g2.tax.dist
 phy2b <- phy2
 dist2 <- calc.distance(phy2b,"horn")
 s2b <- get.samp(phy2b)
-
-
-
-perm2 <- do.permanova(phy2b,dist2, ~time + heat + uv)
+perm2 <- do.permanova(phy2b,dist2, ~time + heat + uv, by="margin")
 
 perm2$tbl.formatted <- perm2$tbl.formatted %>%
-  select(-`beta~'disper'~italic(P)`) %>%
+  # select(-`beta~'disper'~italic(P)`) %>%
   mutate(Predictor=fct_recode(Predictor,"'UV'" = "'uv'"))
 
+
+perm2$tbl$contrasts$heat
+
 perm2$heat.pair.formatted <- perm2$tbl$contrasts$heat %>% 
-  adjust.pairs(c("no heat vs 75C" = "no heat_vs_75C", 
-                 "75C vs autoclave" = "75C_vs_autoclave"))
+  adjust.pairs(c("no heat_vs_75C", 
+                 "75C_vs_autoclave", 
+                 "no heat_vs_autoclave"))
 perm2$uv.pair.formatted <- perm2$tbl$contrasts$uv %>% 
-  adjust.pairs(c("no UV vs UV" = "UV_vs_no UV", 
-                 "no UV vs UV DNA" = "UV DNA_vs_no UV"))
+  adjust.pairs(c("UV_vs_UV DNA", 
+                 "UV_vs_no UV", 
+                 "UV DNA_vs_no UV"))
 
 gtbl2a <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
 gtbl2b <- perm2$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
