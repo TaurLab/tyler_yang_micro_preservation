@@ -987,8 +987,9 @@ g.fig2.pcoa <- perm$ord$data %>%
         aspect.ratio=1)
 
 # g.fig.s2.pcoa.bray
-pos1 <- c(0.75,0.73)
-pos2 <- c(0.75,0.91)
+pos1 <- c(0.75,0.91)
+pos2 <- c(0.75,0.73)
+
 g.fig.s2.bray <- g.fig.s2.pcoa.bray +
   patchwork::inset_element(gtbla.bray,pos1[1],pos1[2],pos1[1],pos1[2]) +
   patchwork::inset_element(gtblb.bray,pos2[1],pos2[2],pos2[1],pos2[2])
@@ -1029,6 +1030,8 @@ samples.compare.all <- phy1 %>% get.samp() %>% pull(lbl)
 
 g1.asv <- make.step(samples.compare,dist=dist_horn,phy=phy1,rows=2)
 g1.asv
+
+
 
 g1.asv.all <- make.step(samples.compare.all,dist=dist_horn,phy=phy1,rows=4)
 g1.asv.all
@@ -1131,27 +1134,34 @@ g2.tax.dist
 phy2b <- phy2
 dist2 <- calc.distance(phy2b,"horn")
 s2b <- get.samp(phy2b)
-perm2 <- do.permanova(phy2b,dist2, ~time + heat + uv, by="margin")
+# perm2 <- do.permanova(phy2b,dist2, ~time + heat + uv, by="margin")
+perm2 <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + heat.autoclave + uv.dna, by="margin")
 
 perm2$tbl.formatted <- perm2$tbl.formatted %>%
-  # select(-`beta~'disper'~italic(P)`) %>%
-  mutate(Predictor=fct_recode(Predictor,"'UV'" = "'uv'"))
+  select(-`beta~'disper'~italic(P)`) %>%
+  mutate(Predictor=fct_recode(Predictor,
+                              "'75'*degree*'C'" = "'heat.75C'", 
+                              "'autoclave'" = "'heat.autoclave'", 
+                              "'time'" = "'time'", 
+                              "'UV DNA'" = "'uv.dna'", 
+                              "'UV'" = "'uv.sample'"
+                              ))
+# perm2$tbl.formatted <- perm2$tbl.formatted %>%
+#   select(-`beta~'disper'~italic(P)`) %>%
+#   mutate(Predictor=fct_recode(Predictor,"'UV'" = "'uv'"))
 
-
-perm2$tbl$contrasts$heat
-
-perm2$heat.pair.formatted <- perm2$tbl$contrasts$heat %>% 
-  adjust.pairs(c("no heat_vs_75C", 
-                 "75C_vs_autoclave", 
-                 "no heat_vs_autoclave"))
-perm2$uv.pair.formatted <- perm2$tbl$contrasts$uv %>% 
-  adjust.pairs(c("UV_vs_UV DNA", 
-                 "UV_vs_no UV", 
-                 "UV DNA_vs_no UV"))
+# perm2$heat.pair.formatted <- perm2$tbl$contrasts$heat %>% 
+#   adjust.pairs(c("no heat '*italic('vs')*' 75'*degree*'C" = "no heat_vs_75C", 
+#                  "75C '*italic('vs')*' autoclave" = "75C_vs_autoclave", 
+#                  "no heat '*italic('vs')*' autoclave" = "no heat_vs_autoclave"))
+# perm2$uv.pair.formatted <- perm2$tbl$contrasts$uv %>% 
+#   adjust.pairs(c("UV '*italic('vs')*' UV DNA" = "UV_vs_UV DNA", 
+#                  "no UV '*italic('vs')*' UV" = "UV_vs_no UV", 
+#                  "no UV '*italic('vs')*' UV DNA" = "UV DNA_vs_no UV"))
 
 gtbl2a <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
-gtbl2b <- perm2$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
-gtbl2c <- perm2$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+# gtbl2b <- perm2$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+# gtbl2c <- perm2$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
 size.scaling2 <- s2b$days %>% unique() %>% sort() %>% 
   scales::rescale(to=c(3,5))
 
@@ -1162,95 +1172,79 @@ g.fig8.pcoa <- perm2$ord$data %>%
                  fill=treatment,
                  shape=treatment,
                  size=time),alpha=0.7) + 
-  # geom_text(aes(x=axis1,y=axis2,label=days),size=3,color="#616161",alpha=0.8) +
   geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
   scale_color_brewer(type="qual",palette=3) +
   scale_fill_brewer(type="qual",palette=3) +
   xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
-  # scale_shape_manual(values=c(1:7)) +
   scale_shape_manual(values=c("none"=21, "75C"=22, "UV"=23, "75C+UV"=24,
                               "autoclave"=23, "autoclave+UV"=24, "UV DNA"=25)) +
   scale_size_manual(values=size.scaling2) +
   guides(colour = guide_legend(override.aes = list(size=4))) +
   theme(!!!theme.settings,
         aspect.ratio=1)
-
-
-pos1 <- c(0.65,0.75)
-pos2 <- c(0.65,0.6)
-pos3 <- c(0.65,0.47)
-
-
+pos1 <- c(0.6,0.77)
 g.fig8 <- g.fig8.pcoa +
-  patchwork::inset_element(gtbl2a,pos1[1],pos1[2],pos1[1],pos1[2]) +
-  patchwork::inset_element(gtbl2b,pos2[1],pos2[2],pos2[1],pos2[2]) +
-  patchwork::inset_element(gtbl2c,pos3[1],pos3[2],pos3[1],pos3[2])
-
+  patchwork::inset_element(gtbl2a,pos1[1],pos1[2],pos1[1],pos1[2])
 g.fig8
 
 
 # Fig S5: exp2 pcoa permanova using bray ----------------------------------
 
-
 phy2b <- phy2
 dist2 <- calc.distance(phy2b,"pct.bray")
 s2b <- get.samp(phy2b)
+# perm2 <- do.permanova(phy2b,dist2, ~time + heat + uv, by="margin")
+perm2 <- do.permanova(phy2b,dist2, ~time + heat.75C + uv.sample + heat.autoclave + uv.dna, by="margin")
 
-
-
-perm2.bray <- do.permanova(phy2b,dist2, ~time + heat + uv)
-
-perm2.bray$tbl.formatted <- perm2.bray$tbl.formatted %>%
+perm2$tbl.formatted <- perm2$tbl.formatted %>%
   select(-`beta~'disper'~italic(P)`) %>%
-  mutate(Predictor=fct_recode(Predictor,"'UV'" = "'uv'"))
+  mutate(Predictor=fct_recode(Predictor,
+                              "'75'*degree*'C'" = "'heat.75C'", 
+                              "'autoclave'" = "'heat.autoclave'", 
+                              "'time'" = "'time'", 
+                              "'UV DNA'" = "'uv.dna'", 
+                              "'UV'" = "'uv.sample'"
+  ))
+# perm2$tbl.formatted <- perm2$tbl.formatted %>%
+#   select(-`beta~'disper'~italic(P)`) %>%
+#   mutate(Predictor=fct_recode(Predictor,"'UV'" = "'uv'"))
 
-perm2.bray$heat.pair.formatted <- perm2.bray$tbl$contrasts$heat %>% 
-  adjust.pairs(c("no heat vs 75C" = "no heat_vs_75C", 
-                 "75C vs autoclave" = "75C_vs_autoclave"))
-perm2.bray$uv.pair.formatted <- perm2.bray$tbl$contrasts$uv %>% 
-  adjust.pairs(c("no UV vs UV" = "UV_vs_no UV", 
-                 "no UV vs UV DNA" = "UV DNA_vs_no UV"))
+# perm2$heat.pair.formatted <- perm2$tbl$contrasts$heat %>% 
+#   adjust.pairs(c("no heat '*italic('vs')*' 75'*degree*'C" = "no heat_vs_75C", 
+#                  "75C '*italic('vs')*' autoclave" = "75C_vs_autoclave", 
+#                  "no heat '*italic('vs')*' autoclave" = "no heat_vs_autoclave"))
+# perm2$uv.pair.formatted <- perm2$tbl$contrasts$uv %>% 
+#   adjust.pairs(c("UV '*italic('vs')*' UV DNA" = "UV_vs_UV DNA", 
+#                  "no UV '*italic('vs')*' UV" = "UV_vs_no UV", 
+#                  "no UV '*italic('vs')*' UV DNA" = "UV DNA_vs_no UV"))
 
-gtbl2a.bray <- perm2.bray$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
-gtbl2b.bray <- perm2.bray$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
-gtbl2c.bray <- perm2.bray$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+gtbl2a <- perm2$tbl.formatted %>% ggtexttable(rows=NULL,theme=tt)
+# gtbl2b <- perm2$heat.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
+# gtbl2c <- perm2$uv.pair.formatted %>% ggtexttable(rows=NULL,theme=tt)
 size.scaling2 <- s2b$days %>% unique() %>% sort() %>% 
   scales::rescale(to=c(3,5))
 
-g.fig.s2.bray.pcoa <- perm2.bray$ord$data %>%
+g.fig8.pcoa <- perm2$ord$data %>%
   arrange(lbl) %>%
   ggplot(aes(x=axis1,y=axis2)) +
   geom_point(aes(color=treatment,
                  fill=treatment,
                  shape=treatment,
                  size=time),alpha=0.7) + 
-  # geom_text(aes(x=axis1,y=axis2,label=days),size=3,color="#616161",alpha=0.8) +
   geom_text_repel(aes(label=lbl),size=3,vjust=1.4,max.overlaps = Inf) +
   scale_color_brewer(type="qual",palette=3) +
   scale_fill_brewer(type="qual",palette=3) +
   xlab(perm2$ord.axes[[1]]) + ylab(perm2$ord.axes[[2]]) +
-  # scale_shape_manual(values=c(1:7)) +
   scale_shape_manual(values=c("none"=21, "75C"=22, "UV"=23, "75C+UV"=24,
                               "autoclave"=23, "autoclave+UV"=24, "UV DNA"=25)) +
   scale_size_manual(values=size.scaling2) +
   guides(colour = guide_legend(override.aes = list(size=4))) +
   theme(!!!theme.settings,
         aspect.ratio=1)
-
-
-
-pos1 <- c(0.65,0.75)
-pos2 <- c(0.65,0.6)
-pos3 <- c(0.65,0.47)
-
-
-
-g.fig.s2.bray <- g.fig.s2.bray.pcoa +
-  patchwork::inset_element(gtbl2a.bray,pos1[1],pos1[2],pos1[1],pos1[2]) +
-  patchwork::inset_element(gtbl2b.bray,pos2[1],pos2[2],pos2[1],pos2[2]) +
-  patchwork::inset_element(gtbl2c.bray,pos3[1],pos3[2],pos3[1],pos3[2])
-
-g.fig.s2.bray
+pos1 <- c(0.6,0.77)
+g.fig8.bray <- g.fig8.pcoa +
+  patchwork::inset_element(gtbl2a,pos1[1],pos1[2],pos1[1],pos1[2])
+g.fig8.bray
 
 
 
