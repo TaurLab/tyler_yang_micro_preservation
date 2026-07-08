@@ -882,14 +882,41 @@ fig.1 <- local({
   environment()
 })
 
+# fig.1$g1.tax.dist
 
-fig.1$g1.tax.dist
+# pdf("plots/fig 1 - exp1 taxdist.pdf",width=14,height=7)
+# fig.1$g1.tax.dist
+# dev.off()
 
-pdf("plots/fig 1 - exp1 taxdist.pdf",width=14,height=7)
-fig.1$g1.tax.dist
+# shell.exec("plots/fig 1 - exp1 taxdist.pdf")
+
+
+  win.metafile("clipboard", width = 14, height = 7)  # width/height in inches
+  print(g)
+  dev.off()
+
+
+g <- fig.1$g1.tax.dist
+
+
+win.metafile("clipboard", width = 3, height = 5)
+print(dev.cur())      # should show a device name/number, confirms metafile is active
+# plot(1:10)             # watch closely for any warning/error here
+print(fig.1$g1.tax.dist)
 dev.off()
-shell.exec("plots/fig 1 - exp1 taxdist.pdf")
 
+
+sessionInfo()
+
+win.metafile("clipboard", width = 3, height = 5)
+plot(1:10)
+dev.off()
+
+copy.to.clipboard.gg(fig.1$g1.tax.dist,width=14,height=7)
+
+
+ggsave("plots/fig S1 - exp1 invsimpson.pdf",
+       fig.s1$g.invsimpson, width=12,height=6)
 
 
 # fig s1: invsimpson ------------------------------------------------------------
@@ -901,7 +928,7 @@ fig.s1 <- local({
   itext <- anova_oneline(itbl)
   
   g.invsimpson <- ggplot(s1,aes(x=lbl,y=InvSimpson)) +
-    geom_col(fill="steelblue") +
+    geom_col(fill="steelblue",width=width) +
     exp1.facet + 
     theme(!!!theme.settings,
           panel.spacing.x = exp1.panel.spacing.x) +
@@ -912,13 +939,13 @@ fig.s1 <- local({
 })
 
 
-fig.s1$g.invsimpson
+# fig.s1$g.invsimpson
 
-pdf("plots/fig S1 - exp1 invsimpson.pdf",width=12,height=6)
-fig.s1$g.invsimpson
-dev.off()
+# pdf("plots/fig S1 - exp1 invsimpson.pdf",width=12,height=6)
+# fig.s1$g.invsimpson
+# dev.off()
 
-shell.exec("plots/fig S1 - exp1 invsimpson.pdf")
+# shell.exec("plots/fig S1 - exp1 invsimpson.pdf")
 
 
 
@@ -988,14 +1015,12 @@ fig.2 <- local({
 })
 
 
-fig.2$g.fig2
+# fig.2$g.fig2
 
-
-pdf("plots/fig 2 - exp1 pcoa permanova horn.pdf",width=9,height=9)
-fig.2$g.fig2
-dev.off()
-
-shell.exec("plots/fig 2 - exp1 pcoa permanova horn.pdf")
+# pdf("plots/fig 2 - exp1 pcoa permanova horn.pdf",width=9,height=9)
+# fig.2$g.fig2
+# dev.off()
+# shell.exec("plots/fig 2 - exp1 pcoa permanova horn.pdf")
 
 
 
@@ -1064,13 +1089,11 @@ fig.s2 <- local({
   environment()
 })
 
-fig.s2$g.fig.s2.bray
-
-pdf("plots/fig S2 - exp1 pcoa permanova bray.pdf",width=9,height=9)
-fig.s2$g.fig.s2.bray
-dev.off()
-
-shell.exec("plots/fig S2 - exp1 pcoa permanova bray.pdf")
+# fig.s2$g.fig.s2.bray
+# pdf("plots/fig S2 - exp1 pcoa permanova bray.pdf",width=9,height=9)
+# fig.s2$g.fig.s2.bray
+# dev.off()
+# shell.exec("plots/fig S2 - exp1 pcoa permanova bray.pdf")
 
 
 # Fig s3, QPCR --------------------------------------------------------------------
@@ -1095,22 +1118,20 @@ fig.s3 <- local({
                        limits=c(0,1e10),
                        # expand=expansion(mult=0.025),
                        labels=pretty_power10) +
-    theme(panel.spacing.x = exp1.panel.spacing.x) +
+    theme(!!!theme.settings,
+          panel.spacing.x = exp1.panel.spacing.x) +
     ggplot2::labs(x="Sample", 
                   caption=parse(text=qtext12))
   environment()
 })
 
 
-fig.s3$g1.qpcr
+# fig.s3$g1.qpcr
 
-
-
-pdf("plots/fig S3 - exp1 qPCR.pdf",width=12,height=6)
-fig.s3$g1.qpcr
-dev.off()
-
-shell.exec("plots/fig S3 - exp1 qPCR.pdf")
+# pdf("plots/fig S3 - exp1 qPCR.pdf",width=12,height=6)
+# fig.s3$g1.qpcr
+# dev.off()
+# shell.exec("plots/fig S3 - exp1 qPCR.pdf")
 
 
 # fig 3: step compare exp1 -------------------------------------------------
@@ -1126,44 +1147,67 @@ fig.3 <- local({
 })
 
 
-fig.3$g1.asv
+# fig.3$g1.asv
 
-pdf("plots/fig 3 - exp1 step selected.pdf",width=12,height=3.5)
-fig.3$g1.asv
-dev.off()
+# pdf("plots/fig 3 - exp1 step selected.pdf",width=12,height=3.5)
+# fig.3$g1.asv
+# dev.off()
 
-shell.exec("plots/fig 3 - exp1 step selected.pdf")
+# shell.exec("plots/fig 3 - exp1 step selected.pdf")
 
 
 # fig S4: step compare exp1: all ------------------------------------------------------------
 
+
 fig.s4 <- local({
   samples.compare.all <- phy1 %>% get.samp() %>% pull(lbl)
   form1 <- letter ~ xtitle.lbl + temp.lbl + time.lbl
-  exp1.facet.all <- facet_nested(form1, 
-                                 # space="free_x",scales="free_x",
-                                 # nest_line=element_line(),
-                                 labeller=label_parsed,
-                                 resect=unit(3,"pt"),
-                                 strip = strip_nested(background_x = exp1.panel.striprect.x,
-                                                      background_y = element_blank(),
-                                                      text_y=element_blank()),
-                                 solo_line=TRUE)
+  # exp1.facet.all <- facet_nested(form1, 
+  #                                # space="free_x",scales="free_x",
+  #                                # nest_line=element_line(),
+  #                                labeller=label_parsed,
+  #                                resect=unit(3,"pt"),
+  #                                strip = strip_nested(background_x = exp1.panel.striprect.x,
+  #                                                     background_y = element_blank(),
+  #                                                     text_y=element_blank()),
+  #                                solo_line=TRUE)
+  # g1.asv.all <- make.step2(samples.compare.all,dist=dist_horn,phy=phy1) +
+  #   exp1.facet.all
+  title.keep <- 1
+  title.blanks <- 2:4
+  blanks <- c(23:48)
+  background_x <- rep(list(element_rect()),48)
+  background_x[blanks] <- rep(list(element_blank()),length(blanks))
+  background_x[title.blanks] <- rep(list(element_blank()),length(title.blanks))
+  background_x[title.keep] <- rep(list(element_blank()),length(title.keep))
+  text_x <- rep(list(element_text()),48)
+  text_x[blanks] <- rep(list(element_blank()),length(blanks))
+  text_x[title.blanks] <- rep(list(element_blank()),length(title.blanks))
+  
   g1.asv.all <- make.step2(samples.compare.all,dist=dist_horn,phy=phy1) +
-    exp1.facet.all
+    facet_manual(. ~ xtitle.lbl + temp.lbl + time.lbl + letter, 
+                 design=design,
+                 labeller=label_parsed,
+                 trim_blank = F,
+                 strip=strip_nested(background_x = background_x,
+                                    text_x = text_x))
   # g1.asv.all
   environment()
 })
 
 
+# fig.s4$g1.asv.all
 
-fig.s4$g1.asv.all
+# fig.s4$g1.asv.all
 
-pdf("plots/fig S4 - exp1 step all.pdf",width=30,height=5)
-fig.s4$g1.asv.all
-dev.off()
 
-shell.exec("plots/fig S4 - exp1 step all.pdf")
+
+
+# ggsave("plots/fig S4 - exp1 step all.pdf",fig.s4$g1.asv.all,width=22,height=14)
+# 
+# shell.exec("plots/fig S4 - exp1 step all.pdf")
+
+# shell.exec("plots/fig S4 - exp1 step all.pdf")
 
 
 # table S1 exp1 lefse -------------------------------------------------------------------
@@ -1188,8 +1232,6 @@ tbl.s1 <- local({
     arrange(direction) %>% 
     select(direction,rank,taxonomy,taxon,taxrank,lda,kw.pvalue) %>%
     mutate(across(.cols=where(is.numeric), .fns = ~sprintf("%.3f",.x)))
-  
-  
   # (just for summarizing)
   # info <- get_taxonomy_info(phy1.lefse,pct.cutoff = 0.99)
   # lda.info <- lda %>% left_join(select(info,taxonomy,grouper,mean.pct.of.parent),by="taxonomy")
@@ -1200,8 +1242,12 @@ tbl.s1 <- local({
   environment()
 })
 
-tbl.s1$lda.tbl %>% group_by(direction) %>% dt(fontsize=10)
-tbl.s1$lda.tbl %>% copy.to.clipboard()
+
+# tbl.s1$lda %>% lda.plot()
+tbl.s1$lda %>% lda.clado()
+
+# tbl.s1$lda.tbl %>% group_by(direction) %>% dt(fontsize=10)
+# tbl.s1$lda.tbl %>% copy.to.clipboard()
 
 
 # fig 4: exp2 taxplot and distance compare -------------------------------
@@ -1257,13 +1303,13 @@ fig.4 <- local({
   environment()
 })
 
-fig.4$g2.tax.dist
+# fig.4$g2.tax.dist
 
-pdf("plots/fig 4 - exp2 taxdist.pdf",width=12,height=7)
-fig.4$g2.tax.dist
-dev.off()
+# pdf("plots/fig 4 - exp2 taxdist.pdf",width=12,height=7)
+# fig.4$g2.tax.dist
+# dev.off()
 
-shell.exec("plots/fig 4 - exp2 taxdist.pdf")
+# shell.exec("plots/fig 4 - exp2 taxdist.pdf")
 
 # fig 5, exp2 pcoa permanova horn ----------------------------------------------
 
@@ -1326,13 +1372,13 @@ fig.5 <- local({
 
 
 
-fig.5$g.fig8
+# fig.5$g.fig8
 
-pdf("plots/fig 5 - exp2 pcoa permanova horn.pdf",width=9,height=9)
-fig.5$g.fig8
-dev.off()
+# pdf("plots/fig 5 - exp2 pcoa permanova horn.pdf",width=9,height=9)
+# fig.5$g.fig8
+# dev.off()
 
-shell.exec("plots/fig 5 - exp2 pcoa permanova horn.pdf")
+# shell.exec("plots/fig 5 - exp2 pcoa permanova horn.pdf")
 
 
 
@@ -1394,14 +1440,14 @@ fig.s5 <- local({
 })
 
 
-fig.s5$g.fig8
+# fig.s5$g.fig8
 
 
-pdf("plots/fig S5 - exp2 pcoa permanova bray.pdf",width=9,height=9)
-fig.s5$g.fig8
-dev.off()
+# pdf("plots/fig S5 - exp2 pcoa permanova bray.pdf",width=9,height=9)
+# fig.s5$g.fig8
+# dev.off()
 
-shell.exec("plots/fig S5 - exp2 pcoa permanova bray.pdf")
+# shell.exec("plots/fig S5 - exp2 pcoa permanova bray.pdf")
 
 
 # fig S6: exp 2 invsimpson ---------------------------------------------------------
@@ -1418,7 +1464,7 @@ fig.s6 <- local({
   itext2 <- anova_oneline(aov2.invsimp)
   
   g2.invsimpson <- ggplot(s2,aes(x=lbl,y=InvSimpson)) +
-    geom_col(fill="steelblue") +
+    geom_col(fill="steelblue",width=width) +
     exp2.facet + 
     theme(!!!theme.settings,
           panel.spacing.x = exp2.panel.spacing.x) +
@@ -1430,14 +1476,14 @@ fig.s6 <- local({
 })
 
 
-fig.s6$g2.invsimpson
+# fig.s6$g2.invsimpson
 
 
-pdf("plots/fig S6 - exp2 invsimpson.pdf",width=12,height=6)
-fig.s6$g2.invsimpson
-dev.off()
+# pdf("plots/fig S6 - exp2 invsimpson.pdf",width=12,height=6)
+# fig.s6$g2.invsimpson
+# dev.off()
 
-shell.exec("plots/fig S6 - exp2 invsimpson.pdf")
+# shell.exec("plots/fig S6 - exp2 invsimpson.pdf")
 
 
 
@@ -1470,7 +1516,8 @@ fig.s7 <- local({
                        # expand=FALSE,
                        # expand=expansion(mult=0.025),
                        labels=pretty_power10) +
-    theme(panel.spacing.x=exp2.panel.spacing.x) +
+    theme(!!!theme.settings,
+          panel.spacing.x=exp2.panel.spacing.x) +
     ggplot2::labs(x="Sample",
                   caption=parse(text=qtext2a))
   environment()
@@ -1479,14 +1526,14 @@ fig.s7 <- local({
 
 
 
-fig.s7$g2.qpcr
+# fig.s7$g2.qpcr
 
 
-pdf("plots/fig S7 - exp2 qpcr.pdf",width=12,height=6)
-fig.s7$g2.qpcr
-dev.off()
+# pdf("plots/fig S7 - exp2 qpcr.pdf",width=12,height=6)
+# fig.s7$g2.qpcr
+# dev.off()
 
-shell.exec("plots/fig S7 - exp2 qpcr.pdf")
+# shell.exec("plots/fig S7 - exp2 qpcr.pdf")
 
 
 # Fig s8, seq loss ------------------------------------------------------
@@ -1509,8 +1556,7 @@ fig.s8 <- local({
                            "denoising" = "seqtab", 
                            "chimera removal" = "nochim",
                            "contaminant removal"="nseqs"))
-  
-  
+
   # scale_fill_brewer("Treatment",type="qual",palette=3,breaks=breaks,labels=labels) +
   
   breaks <- tbl2.seqs$treatment.lbl %>% levels()
@@ -1536,21 +1582,14 @@ fig.s8 <- local({
   environment()  
 })
 
-fig.s8$g.seqloss
+# fig.s8$g.seqloss
 
 
+# pdf("plots/fig S8 - exp2 seqloss.pdf",width=10,height=10)
+# fig.s8$g.seqloss
+# dev.off()
 
-
-pdf("plots/fig S8 - exp2 seqloss.pdf",width=10,height=10)
-fig.s8$g.seqloss
-dev.off()
-
-shell.exec("plots/fig S8 - exp2 seqloss.pdf")
-
-
-
-
-
+# shell.exec("plots/fig S8 - exp2 seqloss.pdf")
 
 
 # fig 6 exp2 step selected --------------------------------------------------------------
@@ -1563,43 +1602,66 @@ fig.6 <- local({
   environment()
 })
 
-fig.6$g.fig
+# fig.6$g.fig
 
-pdf("plots/fig 6 - exp2 step selected.pdf",width=20,height=4)
-fig.6$g.fig
-dev.off()
+# pdf("plots/fig 6 - exp2 step selected.pdf",width=20,height=4)
+# fig.6$g.fig
+# dev.off()
 
-shell.exec("plots/fig 6 - exp2 step selected.pdf")
-
-
-
+# shell.exec("plots/fig 6 - exp2 step selected.pdf")
 
 
 # fig S9 exp2 step all --------------------------------------------------------------
 
 fig.s9 <- local({
+  # samples.all <- phy2 %>% get.samp() %>% pull(lbl)
+  # exp2.facet.fixed <- facet_nested(treatment.lbl ~ time.lbl,
+  #                                  # scales="free_x",space="free_x",
+  #                                  nest_line=element_line(),
+  #                                  labeller=label_parsed,
+  #                                  resect=unit(3,"pt"),
+  #                                  # strip = strip_nested(background_x = exp2.panel.striprect.x),
+  #                                  solo_line=TRUE)
+  # g.fig <- make.step2(samples.all,phy=phy2,dist=dist_2A) +
+  #   exp2.facet.fixed
+  
   samples.all <- phy2 %>% get.samp() %>% pull(lbl)
-  exp2.facet.fixed <- facet_nested(treatment.lbl ~ time.lbl,
-                                   # scales="free_x",space="free_x",
-                                   nest_line=element_line(),
-                                   labeller=label_parsed,
-                                   resect=unit(3,"pt"),
-                                   # strip = strip_nested(background_x = exp2.panel.striprect.x),
-                                   solo_line=TRUE)
+  
+  design <- "
+    ABCDEF
+    GHIJKL
+    MNOPQR
+    STU###
+  "
+  title.keep <- 1
+  title.blanks <- 2:4
+  
+  background_x <- rep(list(element_rect()),32)
+  background_x[title.blanks] <- rep(list(element_blank()),length(title.blanks))
+  background_x[title.keep] <- rep(list(element_blank()),length(title.keep))
+  
+  text_x <- rep(list(element_text()),32)
+  text_x[title.blanks] <- rep(list(element_blank()),length(title.blanks))
+
   g.fig <- make.step2(samples.all,phy=phy2,dist=dist_2A) +
-    exp2.facet.fixed
+    facet_manual( . ~ xtitle.lbl + treatment.lbl + time.lbl,
+                  design=design,
+                  labeller=label_parsed,
+                  strip=strip_nested(background_x = background_x,
+                                     text_x = text_x))
   environment()
 })
 
 
-fig.s9$g.fig
+# fig.s9$g.fig
 
-
-pdf("plots/fig S9 - exp2 step all.pdf",width=15,height=15)
-fig.s9$g.fig
-dev.off()
-
-shell.exec("plots/fig S9 - exp2 step all.pdf")
+# ggsave("plots/fig S9 - exp2 step all.pdf",fig.s9$g.fig,width=25,height=12)
+# 
+# # pdf("plots/fig S9 - exp2 step all.pdf",width=15,height=15)
+# # fig.s9$g.fig
+# # dev.off()
+# 
+# shell.exec("plots/fig S9 - exp2 step all.pdf")
 
 
 
@@ -1648,14 +1710,86 @@ tbl.s2 <- local({
   environment()  
 })
 
-tbl.s2$lda.75c %>% lda.plot(tax.label="taxonomy")
-tbl.s2$lda.autoclave %>% lda.plot(tax.label="taxonomy")
-tbl.s2$lda.uvdna %>% lda.plot(tax.label="taxonomy")
-tbl.s2$lda.75c %>% lda.clado()
-tbl.s2$lda.autoclave %>% lda.clado()
-tbl.s2$lda.uvdna %>% lda.clado()
+# tbl.s2$lda.75c %>% lda.plot(tax.label="taxonomy")
+# tbl.s2$lda.autoclave %>% lda.plot(tax.label="taxonomy")
+# tbl.s2$lda.uvdna %>% lda.plot(tax.label="taxonomy")
+# tbl.s2$lda.75c %>% lda.clado()
+# tbl.s2$lda.autoclave %>% lda.clado()
+# tbl.s2$lda.uvdna %>% lda.clado()
+# 
+# 
+# tbl.autoclave %>% copy.to.clipboard()
+# tbl.uvdna %>% copy.to.clipboard()
 
 
-tbl.autoclave %>% copy.to.clipboard()
-tbl.uvdna %>% copy.to.clipboard()
+
+
+
+# generate files ----------------------------------------------------------
+
+
+if (FALSE) {
+  # Fig 1-6, PDFs
+  ggsave("plots/fig 1 - exp1 taxdist.pdf",
+         fig.1$g1.tax.dist, width=14,height=7)
+  ggsave("plots/fig 2 - exp1 pcoa permanova horn.pdf",
+         fig.2$g.fig2, width=9,height=9)
+  ggsave("plots/fig 3 - exp1 step selected.pdf",
+         fig.3$g1.asv,width=12,height=3.5)
+  ggsave("plots/fig 4 - exp2 taxdist.pdf",
+         fig.4$g2.tax.dist, width=12,height=7)
+  ggsave("plots/fig 5 - exp2 pcoa permanova horn.pdf",
+         fig.5$g.fig8, width=9,height=9)
+  ggsave("plots/fig 6 - exp2 step selected.pdf",
+         fig.6$g.fig, width=20,height=4)
+  
+  # Fig 1-6 EPS version
+  ggsave("plots/fig 1 - exp1 taxdist.eps",
+         fig.1$g1.tax.dist, width=14,height=7, device = cairo_ps)
+  ggsave("plots/fig 2 - exp1 pcoa permanova horn.eps",
+         fig.2$g.fig2, width=9,height=9, device = cairo_ps)
+  ggsave("plots/fig 3 - exp1 step selected.eps",
+         fig.3$g1.asv,width=12,height=3.5, device = cairo_ps)
+  ggsave("plots/fig 4 - exp2 taxdist.eps",
+         fig.4$g2.tax.dist, width=12,height=7, device = cairo_ps)
+  ggsave("plots/fig 5 - exp2 pcoa permanova horn.eps",
+         fig.5$g.fig8, width=9,height=9, device = cairo_ps)
+  ggsave("plots/fig 6 - exp2 step selected.eps",
+         fig.6$g.fig, width=20,height=4, device = cairo_ps)
+  
+  
+
+  # fig S1-S9, PDF
+  ggsave("plots/fig S1 - exp1 invsimpson.pdf",
+         fig.s1$g.invsimpson, width=12,height=6)
+  ggsave("plots/fig S2 - exp1 pcoa permanova bray.pdf",
+         fig.s2$g.fig.s2.bray, width=9,height=9)
+  ggsave("plots/fig S3 - exp1 qPCR.pdf",
+         fig.s3$g1.qpcr, width=12,height=6)
+  ggsave("plots/fig S4 - exp1 step all.pdf",
+         fig.s4$g1.asv.all, width=22,height=14)
+  ggsave("plots/fig S5 - exp2 pcoa permanova bray.pdf",
+         fig.s5$g.fig8, width=9,height=9)
+  ggsave("plots/fig S6 - exp2 invsimpson.pdf",
+         fig.s6$g2.invsimpson, width=12,height=6)
+  ggsave("plots/fig S7 - exp2 qpcr.pdf",
+         fig.s7$g2.qpcr, width=12,height=6)
+  ggsave("plots/fig S8 - exp2 seqloss.pdf",
+         fig.s8$g.seqloss, width=10,height=10)
+  ggsave("plots/fig S9 - exp2 step all.pdf",
+         fig.s9$g.fig,width=25,height=12)
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
