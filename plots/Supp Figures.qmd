@@ -1,0 +1,155 @@
+---
+title: Supplementary Materials
+execute: 
+  echo: false
+  warning: false
+format:
+  pdf:
+    number-sections: false
+    documentclass: article
+    keep-tex: true
+    fig-pos: "H"
+    # tbl-cap-location: bottom
+    include-in-header:
+      text: |
+        \usepackage{geometry}
+        \usepackage{pdflscape}
+        \usepackage{caption}
+        \captionsetup{labelfont=bf, textfont=normalfont, justification=raggedright, singlelinecheck=false}
+        \makeatletter
+        \renewcommand{\fnum@figure}{\figurename\thefigure}
+        \renewcommand{\fnum@table}{\tablename\thetable}
+        \makeatother
+        \pagenumbering{gobble}
+geometry:
+  - margin=.75in        # NIH margins at least 0.5 inch for all pages
+  # - textwidth=4.5in   # NIH no more than 15 chars/inch
+  # - textheight=6in
+crossref:
+  fig-title: "Figure S"
+  tbl-title: "Table S"
+  fig-prefix: "Figure S"
+  tbl-prefix: "Table S"  
+---
+
+```{r}
+library(yingtools2)
+library(tidyverse)
+library(gt)
+```
+
+<!-- ## Figure S1 -->
+![Alpha diversity across storage conditions in the first experiment. Bar plots showing sample-level alpha diversity for the first experiment, as measured by the Inverse Simpson index. Samples are organized by storage temperature and storage duration, as indicated by the facet labels above each panel. ANOVA results for storage temperature, storage duration, and their interaction are shown below the plot.](fig S1 - exp1 invsimpson.pdf){#fig-s1 width=90%}
+
+\newpage
+
+
+<!-- ## Figure S2 -->
+![Principal coordinate analysis of Bray–Curtis distances across storage conditions in the first experiment. Principal coordinate analysis (PCoA) plot based on Bray–Curtis distances between samples in the first experiment. Colors indicate storage duration, and shapes indicate storage temperature. Inset tables summarize PERMANOVA results for storage temperature, storage duration, and their interaction, along with pairwise comparisons between storage durations. Percent variation explained for each axis is indicated in parentheses.](fig S2 - exp1 pcoa permanova bray.pdf){#fig-s2 width=70%}
+
+
+\newpage
+
+
+<!-- ## Figure S3 -->
+![Absolute bacterial abundance measured by 16S qPCR across storage conditions in the first experiment. Bar plot showing absolute bacterial abundance measured by 16S qPCR across all first-experiment samples. Samples are grouped by storage temperature and duration, as indicated by the facet labels above each panel. The y-axis is displayed on a logarithmic scale. Inset text summarizes ANOVA results for storage temperature, storage duration, and their interaction, along with pairwise comparisons between storage durations.](fig S3 - exp1 qPCR.pdf){#fig-s3 width=90%}
+
+
+\newpage
+\pdfpagewidth=16in
+\pdfpageheight=12in
+\newgeometry{margin=0.75in}
+
+
+<!-- ## Figure S4 -->
+
+![Taxon-level relative abundance shifts relative to the baseline sample in the first experiment. Rank relative abundance plots showing taxon-level composition of all first experiment samples compared with the baseline sample, 1A (blue dashed box). Taxa are ordered by relative abundance in the baseline sample. Colored bars represent taxon abundances in each comparison sample, with colors indicating taxonomic classification. The black overlay line shows the baseline abundance profile for the same ordered taxa. Blue labels indicate the Morisita–Horn distance between each comparison sample and baseline.](fig S4 - exp1 step all.pdf){#fig-s4 width=16in}
+
+\newpage
+\pdfpagewidth=8.5in
+\pdfpageheight=11in
+\restoregeometry
+
+
+
+<!-- ## Figure S5 -->
+
+![Principal coordinate analysis of Bray–Curtis distances across storage durations and treatments in the second experiment. Principal coordinate analysis (PCoA) plot based on Bray–Curtis distances between samples in the second experiment. Colors indicate storage duration, and shapes indicate storage temperature. Inset tables summarize PERMANOVA results for 75 °C heat treatment, UV exposure before DNA extraction, UV exposure after DNA extraction, and pre-extraction autoclaving. Percent variation explained for each axis is indicated in parentheses.](fig S5 - exp2 pcoa permanova bray.pdf){#fig-s5 width=70%}
+
+\newpage
+
+<!-- ## Figure S6 -->
+![Alpha diversity across storage durations and treatments in the second experiment. Bar plots showing sample-level alpha diversity for the second experiment, as measured by the Inverse Simpson index. Samples are organized by treatment and storage duration, as indicated by the facet labels above each panel. ANOVA results evaluating the effects of storage duration, 75 °C heat treatment, UV exposure before DNA extraction, UV exposure after DNA extraction, and pre-extraction autoclaving are shown below the plot.](fig S6 - exp2 invsimpson.pdf){#fig-s6 width=90%}
+
+\newpage
+
+<!-- ## Figure S7 -->
+![Absolute bacterial abundance measured by 16S qPCR across storage durations and treatments in the second experiment. Bar plot showing absolute bacterial abundance measured by 16S qPCR across all second-experiment samples. Samples are grouped by treatment and storage duration, as indicated by the facet labels above each panel. ANOVA results evaluating the effects of storage duration, 75 °C heat treatment, UV exposure before DNA extraction, UV exposure after DNA extraction, and pre-extraction autoclaving are shown below the plot.](fig S7 - exp2 qpcr.pdf){#fig-s7 width=90%}
+
+\newpage
+
+<!-- ## Figure S8 -->
+![Read retention across sequence-processing steps in the second experiment. Line plot showing the number of sequences retained for each second-experiment sample across sequential DADA2 processing steps, including demultiplexing, filtering, denoising, chimera removal, and contaminant removal. Lines represent individual samples and are colored by treatment condition. Sample labels are shown at the final processing step.](fig S8 - exp2 seqloss.pdf){#fig-s8 width=100%}
+
+\newpage
+\pdfpagewidth=19in
+\pdfpageheight=11in
+\newgeometry{margin=0.5in}
+
+<!-- ## Figure S9 -->
+
+![Taxon-level relative abundance shifts relative to the baseline sample in the second experiment. Rank relative abundance plots showing taxon-level composition of all second experiment samples compared with the baseline sample, 2A (blue dashed box). Taxa are ordered by relative abundance in the baseline sample. Colored bars represent taxon abundances in each comparison sample, with colors indicating taxonomic classification. The black overlay line shows the baseline abundance profile for the same ordered taxa. Blue labels indicate the Morisita–Horn distance between each comparison sample and baseline.](fig S9 - exp2 step all.pdf){#fig-s9 width=18in}
+
+
+
+
+
+<!-- \newpage -->
+<!-- \pdfpagewidth=8.5in -->
+<!-- \pdfpageheight=11in -->
+<!-- \restoregeometry -->
+
+
+<!-- ## Table S1 -->
+
+\newpage
+\pdfpagewidth=14in
+\pdfpageheight=8.5in
+\newgeometry{margin=0.5in}
+
+
+```{r}
+#| echo: false
+#| label: tbl-s1
+#| tbl-cap: "Linear discriminant analysis effect size (LEfSe) results comparing samples stored for 0–8 days with samples stored for 11 days. The Direction column indicates the group in which each taxon was enriched. Taxonomic assignments are shown with the corresponding rank, LDA score, and Kruskal–Wallis p-value. LDA, linear discriminant analysis; KW, Kruskal–Wallis"
+gt1 <- read_rds("tbl S1 - LEFSE 1.rds")
+gt1
+
+```
+
+
+
+
+\newpage
+\pdfpagewidth=14in
+\pdfpageheight=25in
+\newgeometry{margin=0.5in}
+
+
+<!-- ## Table S2 -->
+
+```{r}
+#| echo: false
+#| label: tbl-s2a
+#| tbl-cap: "Linear discriminant analysis effect size (LEfSe) results are shown for two comparisons: autoclaved samples versus untreated samples, and UV-DNA irradiated samples versus untreated samples. The Direction column indicates the group in which each taxon was enriched. Taxonomic assignments are shown with the corresponding rank, LDA score, and Kruskal–Wallis p-value. LDA, linear discriminant analysis; KW, Kruskal–Wallis."
+
+gt2a <- read_rds("tbl S2a - LEFSE 2A.rds") %>% tab_options(table.font.size = px(8))
+gt2b <- read_rds("tbl S2b - LEFSE 2B.rds") %>% tab_options(table.font.size = px(8))
+
+gt2a
+gt2b
+
+```
+
+
+

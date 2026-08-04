@@ -12,11 +12,12 @@ library(ggpubr)
 library(ggrepel)
 library(decontam)
 library(emmeans) # for contrasts
+library(gt) # formatted tables
 rm(list=ls())
 
 load("data/phy.tyler.RData")
 load("data/phy.tyler.additional.RData")
-phy.others = read_rds("data/other.samps.rds")
+# phy.others = read_rds("data/other.samps.rds")
 
 # correct negative phylo tree lengths
 tr <- phy_tree(phy.tyler)
@@ -24,11 +25,31 @@ tr$edge.length[tr$edge.length<0] <- 0
 phy_tree(phy.tyler) <- tr
 rm(tr)
 
-# add beta metric, using samp.comparator
+# PCR neg control for experiment 2
+phy.pcrneg.control <- read_rds("data/phy.pcrneg.control.rds") %>%
+  select_tax_table(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species) %>%
+  mutate_sample_data(sample=str_replace(sample,"..pool1161",""),
+                     lbl="PCRNeg",lbl2="PCRNeg",lbl3="PCRNeg",
+                     treatment="PCRNeg")
 
-# remove additional ranks
-phy.tyler <- phy.tyler %>% 
-  select(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species)
+# use updated taxonomy
+load("data/new_taxonomy.RData",envir=newtax <- new.env())
+t.old <- phy.tyler %>% get.tax()
+t.new <- t.old %>% select(otu) %>%
+  left_join(newtax$t2,by="otu") %>%
+  select(otu,Domain,Phylum,Class,Order,Family,Genus,Species)
+tax_table(phy.tyler) <- set.tax(t.new)
+
+t.old.pcrneg <- phy.pcrneg.control %>% get.tax()
+t.new.pcrneg <- t.old.pcrneg %>% select(otu) %>%
+  left_join(newtax$t2,by="otu") %>%
+  select(otu,Domain,Phylum,Class,Order,Family,Genus,Species)
+tax_table(phy.pcrneg.control) <- set.tax(t.new.pcrneg)
+rm(t.old,t.new,t.old.pcrneg,t.new.pcrneg,newtax)
+
+# # remove additional ranks
+# phy.tyler <- phy.tyler %>% 
+#   select(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species)
 
 # modify sample_data
 s.tyler <- phy.tyler %>% get.samp() %>%
@@ -156,11 +177,6 @@ phy2.contam <- phy.tyler %>%
                                   "'autoclave'+'UV'"="autoclave+UV",
                                   "'UV DNA'"="UV DNA"))
 
-phy.pcrneg.control <- read_rds("data/phy.pcrneg.control.rds") %>%
-  select_tax_table(otu,Superkingdom,Phylum,Class,Order,Family,Genus,Species) %>%
-  mutate_sample_data(sample=str_replace(sample,"..pool1161",""),
-                     lbl="PCRNeg",lbl2="PCRNeg",lbl3="PCRNeg",
-                     treatment="PCRNeg")
 
 phy2.with.pcrneg <- phy.combine(phy2.contam,phy.pcrneg.control) %>%
   mutate(lbl=fct_reordern(lbl,lbl),
@@ -695,14 +711,62 @@ make.step2 <- function(samples,phy,dist,aspect.ratio=1) {
     theme(!!!theme.settings,
           legend.key.size = unit(0.85,"lines"),
           axis.text.x = element_blank(),
-          axis.ticks.x = element_blank(),
+          axis.ticks.x = element_blank()
           # axis.title = element_blank(),
-          panel.background = element_blank())
+          # panel.background = element_blank()
+          )
   # panel.spacing.x = exp1.panel.spacing.x
   g1.asv
 }
 
+make.lda.gt <- function(lda,title=NULL,footnote=NULL) {
+  tbl <- lda %>%
+    filter(pass,!str_detect(taxonomy,"xxxx$")) %>%
+    mutate(taxonomy=str_replace_all(taxonomy,"xxxx","\u2014"),
+           taxonomy=str_replace_all(taxonomy,"\\[|\\]","")) %>%
+    arrange(direction) %>% 
+    transmute(direction,
+              # rank=str_glue("{taxrank} ({rank})"),
+              rank=str_glue("({rank}) {taxrank}"),
+              taxonomy,lda,kw.pvalue,log.max)
+  
+  dirs <- levels(factor(tbl$direction))
+  colors <- c("#D9F1FF","#FFE0DB")
+  
+  gtbl <- tbl %>% gt(groupname_col = "direction",
+                     row_group_as_column = TRUE) %>%
+    cols_label(lda="LDA",
+               rank="Rank",
+               taxonomy="Taxonomy",
+               kw.pvalue=md("KW *P*-value"),
+               log.max="Log-Max") %>%
+    fmt_number(columns=c(lda,log.max),decimals=2) %>%
+    fmt(columns=kw.pvalue,fns=scales::label_pvalue()) %>%
+    tab_style(style=cell_text(align="left"),
+              locations=cells_body(columns=rank)) %>%
+    tab_stubhead("Direction") %>%
+    tab_options(table.font.size=px(10))
 
+  for (i in seq_along(dirs)) {
+    color <- colors[i]
+    dir <- dirs[i]
+    gtbl <- gtbl %>%
+      tab_style(style=cell_fill(color=color),
+                locations=cells_body(rows=direction==dir)) %>%
+      tab_style(style=cell_fill(color=color),
+                locations=cells_row_groups(groups=dir)) 
+  }
+  
+  if (!is.null(title)) {
+    gtbl <- gtbl %>% tab_header(title=title) %>%
+      tab_style(style=cell_text(align="left"),
+                locations=cells_title())
+  }
+  if (!is.null(footnote)) {
+    gtbl <- gtbl %>% tab_footnote(footnote=footnote)
+  }
+  return(gtbl)
+}
 
 
 # universal plotting elements (run) ---------------------------------------------
@@ -854,21 +918,21 @@ fig.1 <- local({
           legend.key.size = unit(0.85,"lines"),
           strip.clip="on",
           panel.spacing.x = exp1.panel.spacing.x)
-  # g1a.tax
   
   dtext1 <- s1a %>% filter(sample=="1A") %>%
-    mutate(label="baseline\nsample",
-           x=1.5,y=0.2,
-           xend=1,yend=0.003)
-  dtext1.layer <- list(geom_text(data=dtext1,aes(x=x,y=y,label=label),
-                                 vjust=-0.02,lineheight=0.8),
-                       geom_segment(data=dtext1,aes(x=x,y=y,xend=xend,yend=yend)))
-  
+    mutate(label="italic('(baseline sample)')",
+           x=1,y=0.5)
+  dtext1.layer <- list(geom_text(data=dtext1,
+                                 aes(x=x,y=y,label=label),
+                                 color="#616161",
+                                 # color="dark gray"
+                                 parse=TRUE,size=3,angle=90,hjust=0.5,
+                                 lineheight=0.75))
   g1a.dist <- ggplot(s1a) +
     expand_limits(y=1) +
     geom_col(aes(x=lbl,y=dist),fill="steelblue",width=width) +
     geom_text(aes(x=lbl,y=dist,label=pretty_number(dist),color=baseline),
-              vjust=0,size=3,show.legend = FALSE) +
+              vjust=-0.2,size=3,show.legend = FALSE) +
     dtext1.layer +
     scale_y_continuous(name="Distance\n(from baseline)",
                        expand=expansion(mult=c(0.03,0.05)))  +
@@ -890,33 +954,8 @@ fig.1 <- local({
 
 # shell.exec("plots/fig 1 - exp1 taxdist.pdf")
 
-
-  win.metafile("clipboard", width = 14, height = 7)  # width/height in inches
-  print(g)
-  dev.off()
-
-
-g <- fig.1$g1.tax.dist
-
-
-win.metafile("clipboard", width = 3, height = 5)
-print(dev.cur())      # should show a device name/number, confirms metafile is active
-# plot(1:10)             # watch closely for any warning/error here
-print(fig.1$g1.tax.dist)
-dev.off()
-
-
-sessionInfo()
-
-win.metafile("clipboard", width = 3, height = 5)
-plot(1:10)
-dev.off()
-
-copy.to.clipboard.gg(fig.1$g1.tax.dist,width=14,height=7)
-
-
-ggsave("plots/fig S1 - exp1 invsimpson.pdf",
-       fig.s1$g.invsimpson, width=12,height=6)
+# ggsave("plots/fig S1 - exp1 invsimpson.pdf",
+#        fig.s1$g.invsimpson, width=12,height=6)
 
 
 # fig s1: invsimpson ------------------------------------------------------------
@@ -938,7 +977,6 @@ fig.s1 <- local({
   environment()
 })
 
-
 # fig.s1$g.invsimpson
 
 # pdf("plots/fig S1 - exp1 invsimpson.pdf",width=12,height=6)
@@ -950,7 +988,6 @@ fig.s1 <- local({
 
 
 # fig 2: exp 1, pcoa and permanova with horn ---------------------------------------------------------------
-
 
 fig.2 <- local({
   phy1b <- phy1 %>%
@@ -1106,10 +1143,9 @@ fig.s3 <- local({
                                      "Day 3 vs 8" = c("Day 3","Day 8"),
                                      "Day 8 vs 11" = c("Day 8","Day 11")))
   qtext <- anova_oneline(aov.qpcr)
-  qtext2 <- contrast_oneline(aov.qpcr$contrasts$time,"Time contrasts")
+  qtext2 <- contrast_oneline(aov.qpcr$contrasts$time,"Time pair")
   qtext12 <- str_glue("atop({qtext},{qtext2})")
-  
-  
+
   g1.qpcr <- ggplot(s1b) +
     geom_col(aes(x=lbl,y=qpcr.totalseqs),fill="steelblue",width=width) +
     exp1.facet + 
@@ -1155,7 +1191,6 @@ fig.3 <- local({
 
 # shell.exec("plots/fig 3 - exp1 step selected.pdf")
 
-
 # fig S4: step compare exp1: all ------------------------------------------------------------
 
 
@@ -1177,13 +1212,20 @@ fig.s4 <- local({
   title.blanks <- 2:4
   blanks <- c(23:48)
   background_x <- rep(list(element_rect()),48)
+  text_x <- rep(list(element_text()),48)
+  # remove A/B
   background_x[blanks] <- rep(list(element_blank()),length(blanks))
+  text_x[blanks] <- rep(list(element_blank()),length(blanks))
+  
   background_x[title.blanks] <- rep(list(element_blank()),length(title.blanks))
   background_x[title.keep] <- rep(list(element_blank()),length(title.keep))
-  text_x <- rep(list(element_text()),48)
-  text_x[blanks] <- rep(list(element_blank()),length(blanks))
   text_x[title.blanks] <- rep(list(element_blank()),length(title.blanks))
-  
+  design <- "
+    ABCDEFGH
+    ##IJKLMN
+    ##OPQRST
+    ##UVWXYZ
+  "
   g1.asv.all <- make.step2(samples.compare.all,dist=dist_horn,phy=phy1) +
     facet_manual(. ~ xtitle.lbl + temp.lbl + time.lbl + letter, 
                  design=design,
@@ -1197,16 +1239,7 @@ fig.s4 <- local({
 
 
 # fig.s4$g1.asv.all
-
-# fig.s4$g1.asv.all
-
-
-
-
 # ggsave("plots/fig S4 - exp1 step all.pdf",fig.s4$g1.asv.all,width=22,height=14)
-# 
-# shell.exec("plots/fig S4 - exp1 step all.pdf")
-
 # shell.exec("plots/fig S4 - exp1 step all.pdf")
 
 
@@ -1220,31 +1253,25 @@ tbl.s1 <- local({
                                  "Day 0-8"="Day 3",
                                  "Day 0-8"="Day 8",
                                  "Day 11"="Day 11"))
-  
-  # s1 <- phy1.lefse %>% get.samp()
-  
   set.seed(1)
   lda <- lda.effect(phy1.lefse,class="time.group",lda.cutoff=3) 
-  
-  # the table which can be printed
-  lda.tbl <- lda %>%
-    filter(pass) %>%
-    arrange(direction) %>% 
-    select(direction,rank,taxonomy,taxon,taxrank,lda,kw.pvalue) %>%
-    mutate(across(.cols=where(is.numeric), .fns = ~sprintf("%.3f",.x)))
-  # (just for summarizing)
-  # info <- get_taxonomy_info(phy1.lefse,pct.cutoff = 0.99)
-  # lda.info <- lda %>% left_join(select(info,taxonomy,grouper,mean.pct.of.parent),by="taxonomy")
-  # lda.tbl.final <- lda.info %>% group_by(direction,grouper) %>% 
-  #   slice(which.max(rank))
-  # lda.tbl.final %>% group_by(direction) %>% arrange(taxonomy) %>% dt()
 
+  gtbl <- lda %>% 
+    make.lda.gt(title="Predictors of Storage Time")
+  clado <- lda %>% lda.clado()
   environment()
 })
 
 
-# tbl.s1$lda %>% lda.plot()
-tbl.s1$lda %>% lda.clado()
+ss <- tbl.s1$phy1.lefse %>% get.samp()
+
+refactor
+
+
+
+
+
+# tbl.s1$gtbl %>% tab_options(table.font.size = px(10))
 
 # tbl.s1$lda.tbl %>% group_by(direction) %>% dt(fontsize=10)
 # tbl.s1$lda.tbl %>% copy.to.clipboard()
@@ -1277,33 +1304,41 @@ fig.4 <- local({
           axis.text.y=element_blank(),
           axis.ticks=element_blank())
   # g2a.tax
-  
-  s2a %>% filter(sample=="TY.1_D0_NT") %>% pull(sample)
   dtext2 <- s2a %>% filter(lbl=="2A") %>%
-    mutate(label="baseline\nsample",
-           x=1.5,y=0.2,
-           xend=1,yend=0.003)
-  dtext2.layer <- list(geom_text(data=dtext2,aes(x=x,y=y,label=label),vjust=-0.02,lineheight=0.8),
-                       geom_segment(data=dtext2,aes(x=x,y=y,xend=xend,yend=yend)))
+    mutate(label="italic('(baseline sample)')",
+           x=1,y=0.5)
+  dtext2.layer <- list(geom_text(data=dtext2,
+                                 aes(x=x,y=y,label=label),
+                                 color="#616161",
+                                 parse=TRUE,size=3,angle=90,hjust=0.5,
+                                 lineheight=0.75))
+  # need this to adjust alignment when close to top border
+  vjust_top <- function(y, vjust_lo=-0.2, vjust_hi=0.5, threshold=0.94, ymax=1) {
+    smoothstep <- function(t) t^2 * (3 - 2*t)
+    t <- pmin(pmax((y - threshold) / (ymax - threshold), 0), 1)
+    vjust_lo + smoothstep(t) * (vjust_hi - vjust_lo)
+  }
   g2a.dist <- ggplot(s2a) +
     geom_col(aes(x=lbl,y=dist),fill="steelblue",width=width) +
-    geom_text(aes(x=lbl,y=dist,label=pretty_number(dist),color=baseline),
-              vjust=0,size=3,show.legend = FALSE) +
+    # geom_text(aes(x=lbl,y=dist,label=pretty_number(dist),color=baseline),
+    #           vjust=1,size=3,show.legend = FALSE) +
+    geom_text(aes(x=lbl,y=dist,label=pretty_number(dist),color=baseline,
+                  vjust=vjust_top(dist)),
+              size=3,show.legend = FALSE) +
     dtext2.layer +
     scale_y_continuous(name="Distance\n(from baseline)",
-                       expand=expansion(mult=c(0,0.05)))  +
+                       expand=expansion(mult=c(0.03,0.05)))  +
     scale_color_manual(values=c("TRUE"="red","FALSE"="black")) +
     xlab("Sample") +
     exp2.facet +
     theme(!!!theme.settings,
-          panel.spacing.x = exp2.panel.spacing.x)
+          panel.spacing.x = exp2.panel.spacing.x) 
   # g2a.dist
-  
   g2.tax.dist <- gg.stack2(g2a.dist,g2a.tax,heights=c(1,3))
   environment()
 })
 
-# fig.4$g2.tax.dist
+
 
 # pdf("plots/fig 4 - exp2 taxdist.pdf",width=12,height=7)
 # fig.4$g2.tax.dist
@@ -1468,7 +1503,7 @@ fig.s6 <- local({
     exp2.facet + 
     theme(!!!theme.settings,
           panel.spacing.x = exp2.panel.spacing.x) +
-    ggplot2::labs(title="Inverse Simpson index",
+    ggplot2::labs(#title="Inverse Simpson index",
                   x="Sample", 
                   y="Inverse Simpson index",
                   caption=parse(text=itext2))
@@ -1691,24 +1726,18 @@ tbl.s2 <- local({
     filter(treatment %in% c("none","UV DNA")) %>%
     mutate(treatment=as.character(treatment)) %>%
     lda.effect(class="treatment",n_boots=NULL,lda.cutoff = 3)
-  
-  
-  
-  make.lda.table <- function(lda) {
-    lda %>%
-      filter(pass,
-             !str_detect(taxonomy,"xxxx$")) %>%
-      mutate(taxonomy=str_replace_all(taxonomy,"(\\[|\\]xxxx\\|)","")) %>%
-      arrange(direction,taxonomy) %>% 
-      select(direction,taxonomy,taxrank,lda,kw.pvalue) %>%
-      mutate(across(.cols=where(is.numeric), .fns = ~sprintf("%.3f",.x)))
-  }
-  
-  tbl.autoclave <- lda.autoclave %>% make.lda.table() %>% arrange(desc(direction))
-  tbl.uvdna <- lda.uvdna %>% make.lda.table() %>% arrange(desc(direction))
+  gtbl.autoclave <- lda.autoclave %>% make.lda.gt(title="Predictors of autoclave vs. no treatment")
+  clado.autoclave <- lda.autoclave %>% lda.clado()
+    
+  gtbl.uvdna <- lda.uvdna %>% make.lda.gt(title="Predictors of UV DNA vs. no treatment")
+  clado.uvdna <- lda.uvdna %>% lda.clado()
   
   environment()  
 })
+
+# tbl.s2$gtbl.autoclave %>% tab_options(table.font.size = px(10))
+# tbl.s2$gtbl.uvdna %>% tab_options(table.font.size = px(10))
+
 
 # tbl.s2$lda.75c %>% lda.plot(tax.label="taxonomy")
 # tbl.s2$lda.autoclave %>% lda.plot(tax.label="taxonomy")
@@ -1729,6 +1758,7 @@ tbl.s2 <- local({
 
 
 if (FALSE) {
+
   # Fig 1-6, PDFs
   ggsave("plots/fig 1 - exp1 taxdist.pdf",
          fig.1$g1.tax.dist, width=14,height=7)
@@ -1742,7 +1772,7 @@ if (FALSE) {
          fig.5$g.fig8, width=9,height=9)
   ggsave("plots/fig 6 - exp2 step selected.pdf",
          fig.6$g.fig, width=20,height=4)
-  
+
   # Fig 1-6 EPS version
   ggsave("plots/fig 1 - exp1 taxdist.eps",
          fig.1$g1.tax.dist, width=14,height=7, device = cairo_ps)
@@ -1756,28 +1786,45 @@ if (FALSE) {
          fig.5$g.fig8, width=9,height=9, device = cairo_ps)
   ggsave("plots/fig 6 - exp2 step selected.eps",
          fig.6$g.fig, width=20,height=4, device = cairo_ps)
-  
-  
 
+  
+  
   # fig S1-S9, PDF
   ggsave("plots/fig S1 - exp1 invsimpson.pdf",
-         fig.s1$g.invsimpson, width=12,height=6)
+         fig.s1$g.invsimpson, width=10,height=5.5)
   ggsave("plots/fig S2 - exp1 pcoa permanova bray.pdf",
          fig.s2$g.fig.s2.bray, width=9,height=9)
+
   ggsave("plots/fig S3 - exp1 qPCR.pdf",
-         fig.s3$g1.qpcr, width=12,height=6)
+         fig.s3$g1.qpcr, width=10,height=5.5)
+
   ggsave("plots/fig S4 - exp1 step all.pdf",
          fig.s4$g1.asv.all, width=22,height=14)
   ggsave("plots/fig S5 - exp2 pcoa permanova bray.pdf",
          fig.s5$g.fig8, width=9,height=9)
   ggsave("plots/fig S6 - exp2 invsimpson.pdf",
-         fig.s6$g2.invsimpson, width=12,height=6)
+         fig.s6$g2.invsimpson, width=10,height=5.5)
   ggsave("plots/fig S7 - exp2 qpcr.pdf",
-         fig.s7$g2.qpcr, width=12,height=6)
+         fig.s7$g2.qpcr, width=10,height=5.5)
+
   ggsave("plots/fig S8 - exp2 seqloss.pdf",
          fig.s8$g.seqloss, width=10,height=10)
   ggsave("plots/fig S9 - exp2 step all.pdf",
          fig.s9$g.fig,width=25,height=12)
+
+  write_rds(tbl.s1$gtbl,file="plots/tbl S1 - LEFSE 1.rds")
+  write_rds(tbl.s2$gtbl.autoclave, file="plots/tbl S2a - LEFSE 2A.rds")
+  write_rds(tbl.s2$gtbl.uvdna, file="plots/tbl S2b - LEFSE 2B.rds")
+
+  # write_rds(tbl.s1$gtbl,file="plots/tbl S1 - LEFSE 1.rds")
+  # write_rds(tbl.s2$gtbl.autoclave,file="plots/tbl S2a - LEFSE 2A.rds")
+  # write_rds(tbl.s2$gtbl.uvdna,file="plots/tbl S2b - LEFSE 2B.rds")
+  # tbl.s1$gtbl
+  # tbl.s2$gtbl.autoclave
+  # tbl.s2$gtbl.uvdna
+  
+  
+  
 
 }
 
