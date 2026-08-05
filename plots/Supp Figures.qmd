@@ -26,10 +26,10 @@ geometry:
   # - textwidth=4.5in   # NIH no more than 15 chars/inch
   # - textheight=6in
 crossref:
-  fig-title: "Figure S"
-  tbl-title: "Table S"
-  fig-prefix: "Figure S"
-  tbl-prefix: "Table S"  
+  fig-title: "Supplementary Figure S"
+  tbl-title: "Supplementary Table S"
+  fig-prefix: "Supplementary Figure S"
+  tbl-prefix: "Supplementary Table S"  
 ---
 
 ```{r}

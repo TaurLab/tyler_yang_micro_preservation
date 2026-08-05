@@ -114,14 +114,14 @@
   \newcommand\listtablename{List of Tables}
 \fi
 \ifdefined\figurename
-  \renewcommand*\figurename{Figure S}
+  \renewcommand*\figurename{Supplementary Figure S}
 \else
-  \newcommand\figurename{Figure S}
+  \newcommand\figurename{Supplementary Figure S}
 \fi
 \ifdefined\tablename
-  \renewcommand*\tablename{Table S}
+  \renewcommand*\tablename{Supplementary Table S}
 \else
-  \newcommand\tablename{Table S}
+  \newcommand\tablename{Supplementary Table S}
 \fi
 }
 \@ifpackageloaded{float}{}{\usepackage{float}}
@@ -165,7 +165,7 @@
 
 \begin{document}
 \maketitle
-\ifdefined\Shaded\renewenvironment{Shaded}{\begin{tcolorbox}[breakable, boxrule=0pt, enhanced, frame hidden, interior hidden, borderline west={3pt}{0pt}{shadecolor}, sharp corners]}{\end{tcolorbox}}\fi
+\ifdefined\Shaded\renewenvironment{Shaded}{\begin{tcolorbox}[sharp corners, borderline west={3pt}{0pt}{shadecolor}, interior hidden, breakable, boxrule=0pt, frame hidden, enhanced]}{\end{tcolorbox}}\fi
 
 \begin{figure}[H]
 
@@ -235,12 +235,13 @@ with pairwise comparisons between storage durations.}
 \caption{\label{fig-s4}Taxon-level relative abundance shifts relative to
 the baseline sample in the first experiment. Rank relative abundance
 plots showing taxon-level composition of all first experiment samples
-compared with the baseline sample, 1A. Taxa are ordered by relative
-abundance in the baseline sample. Colored bars represent taxon
-abundances in each comparison sample, with colors indicating taxonomic
-classification. The black overlay line shows the baseline abundance
-profile for the same ordered taxa. Blue labels indicate the
-Morisita--Horn distance between each comparison sample and baseline.}
+compared with the baseline sample, 1A (blue dashed box). Taxa are
+ordered by relative abundance in the baseline sample. Colored bars
+represent taxon abundances in each comparison sample, with colors
+indicating taxonomic classification. The black overlay line shows the
+baseline abundance profile for the same ordered taxa. Blue labels
+indicate the Morisita--Horn distance between each comparison sample and
+baseline.}
 
 \end{figure}
 
@@ -337,12 +338,13 @@ at the final processing step.}
 \caption{\label{fig-s9}Taxon-level relative abundance shifts relative to
 the baseline sample in the second experiment. Rank relative abundance
 plots showing taxon-level composition of all second experiment samples
-compared with the baseline sample, 2A. Taxa are ordered by relative
-abundance in the baseline sample. Colored bars represent taxon
-abundances in each comparison sample, with colors indicating taxonomic
-classification. The black overlay line shows the baseline abundance
-profile for the same ordered taxa. Blue labels indicate the
-Morisita--Horn distance between each comparison sample and baseline.}
+compared with the baseline sample, 2A (blue dashed box). Taxa are
+ordered by relative abundance in the baseline sample. Colored bars
+represent taxon abundances in each comparison sample, with colors
+indicating taxonomic classification. The black overlay line shows the
+baseline abundance profile for the same ordered taxa. Blue labels
+indicate the Morisita--Horn distance between each comparison sample and
+baseline.}
 
 \end{figure}
 
