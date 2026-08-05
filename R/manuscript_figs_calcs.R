@@ -719,11 +719,12 @@ make.step2 <- function(samples,phy,dist,aspect.ratio=1) {
   g1.asv
 }
 
+
 make.lda.gt <- function(lda,title=NULL,footnote=NULL) {
   tbl <- lda %>%
     filter(pass,!str_detect(taxonomy,"xxxx$")) %>%
-    mutate(taxonomy=str_replace_all(taxonomy,"xxxx","\u2014"),
-           taxonomy=str_replace_all(taxonomy,"\\[|\\]","")) %>%
+    mutate(#taxonomy=str_replace_all(taxonomy,"\\[|\\]",""),
+      taxonomy=str_replace_all(taxonomy,"xxxx","\u2014")) %>%
     arrange(direction) %>% 
     transmute(direction,
               # rank=str_glue("{taxrank} ({rank})"),
@@ -746,7 +747,7 @@ make.lda.gt <- function(lda,title=NULL,footnote=NULL) {
               locations=cells_body(columns=rank)) %>%
     tab_stubhead("Direction") %>%
     tab_options(table.font.size=px(10))
-
+  
   for (i in seq_along(dirs)) {
     color <- colors[i]
     dir <- dirs[i]
@@ -1024,7 +1025,7 @@ fig.2 <- local({
   labels <- parse(text=breaks)  
   
   g.fig2.pcoa <- perm$ord$data %>%
-    arrange(lbl) %>%
+    arrange(desc(lbl)) %>%
     ggplot(aes(x=axis1,y=axis2)) +
     geom_point(aes(fill=temp.lbl,
                    color=temp.lbl,
@@ -1097,7 +1098,7 @@ fig.s2 <- local({
   labels <- parse(text=breaks) 
   
   g.fig.s2.pcoa.bray <- perm.bray$ord$data %>%
-    arrange(lbl) %>%
+    arrange(desc(lbl)) %>%
     ggplot(aes(x=axis1,y=axis2)) +
     geom_point(aes(fill=temp.lbl,
                    color=temp.lbl,
@@ -1257,15 +1258,16 @@ tbl.s1 <- local({
   lda <- lda.effect(phy1.lefse,class="time.group",lda.cutoff=3) 
 
   gtbl <- lda %>% 
+    
     make.lda.gt(title="Predictors of Storage Time")
   clado <- lda %>% lda.clado()
   environment()
 })
 
 
-ss <- tbl.s1$phy1.lefse %>% get.samp()
-
-refactor
+# ss <- tbl.s1$phy1.lefse %>% get.samp()
+# 
+# refactor
 
 
 
@@ -1379,7 +1381,7 @@ fig.5 <- local({
   labels <- parse(text=breaks)
   
   g.fig8.pcoa <- perm2$ord$data %>%
-    arrange(lbl) %>%
+    arrange(desc(lbl)) %>%
     ggplot(aes(x=axis1,y=axis2)) +
     geom_point(aes(color=treatment.lbl,
                    fill=treatment.lbl,
@@ -1403,8 +1405,6 @@ fig.5 <- local({
   
   environment()
 })
-
-
 
 
 # fig.5$g.fig8
@@ -1450,7 +1450,7 @@ fig.s5 <- local({
   labels <- parse(text=breaks)
   
   g.fig8.pcoa <- perm2$ord$data %>%
-    arrange(lbl) %>%
+    arrange(desc(lbl)) %>%
     ggplot(aes(x=axis1,y=axis2)) +
     geom_point(aes(color=treatment.lbl,
                    fill=treatment.lbl,
@@ -1705,7 +1705,6 @@ fig.s9 <- local({
 # s2b$heat
 # no heat 75C autoclave
 
-
 tbl.s2 <- local({
   phy2.lefse <- phy2 %>% phy.collapse()
   
@@ -1822,9 +1821,7 @@ if (FALSE) {
   # tbl.s1$gtbl
   # tbl.s2$gtbl.autoclave
   # tbl.s2$gtbl.uvdna
-  
-  
-  
+
 
 }
 
