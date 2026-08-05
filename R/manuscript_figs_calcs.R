@@ -1599,7 +1599,7 @@ fig.s8 <- local({
 
   g.seqloss <- 
     ggplot(tbl2.long,aes(x=name,y=value,color=treatment.lbl,label=label,group=lbl)) +
-    geom_point(size=4) +
+    geom_point(size=3) +
     expand_limits(y=c(0,1e7)) +
     geom_line(linewidth=1) +
     # geom_text(hjust=0) +
